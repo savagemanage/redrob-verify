@@ -369,17 +369,17 @@ EOF
   eval-cer)
     need_uv
     run_preflight
-    "$UV" run python -m harness.eval_cer --config "$CONFIG"
+    "$UV" run python -m harness.eval_cer --config "$CONFIG" "$@"
     ;;
   eval-forgery)
     need_uv
     run_preflight
-    "$UV" run python -m harness.eval_forgery --config "$CONFIG"
+    "$UV" run python -m harness.eval_forgery --config "$CONFIG" "$@"
     ;;
   eval-face)
     need_uv
     run_preflight
-    "$UV" run python -m harness.eval_face --config "$CONFIG"
+    "$UV" run python -m harness.eval_face --config "$CONFIG" "$@"
     ;;
   eval-tc6)
     need_uv
