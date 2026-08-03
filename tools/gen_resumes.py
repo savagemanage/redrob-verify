@@ -101,7 +101,50 @@ def github_headers() -> dict[str, str]:
     return headers
 
 
-def fetch_active_github_users(client: httpx.Client, n: int, *, seed: int) -> list[dict[str, Any]]:
+# Well-known public GitHub logins used when API search is rate-limited / unauthenticated.
+# Resumes still anchor to real profiles; live identity sources hit GitHub at eval time.
+_SEED_LOGINS: tuple[str, ...] = (
+    "torvalds", "gvanrossum", "fabpot", "antirez", "keon", "sindresorhus", "tj",
+    "gaearon", "yyx990803", "a8m", "schacon", "mojombo", "defunkt", "pjhyett",
+    "wycats", "dhh", "jashkenas", "mrdoob", "addyosmani", "paulirish", "getify",
+    "substack", "isaacs", "creationix", "indexzero", "felixge", "visionmedia",
+    "rauchg", "timuric", "shuding", "leeoniya", "Rich-Harris", "sveltejs",
+    "evanw", "jakearchibald", "surma", "developit", "lukeed", "padolsey",
+    "kennethreitz", "mitsuhiko", "pallets", "encode", "tiangolo", "samuelcolvin",
+    "simonw", "willmcgugan", "Textualize", "fastapi", "Kludex",
+    "psf", "pypa", "numpy", "scipy", "matplotlib",
+    "pytorch", "huggingface", "explosion", "spaCy", "nltk", "Homebrew",
+    "kubernetes", "golang", "rust-lang", "apple", "microsoft", "google",
+    "facebook", "amzn", "netflix", "uber", "airbnb", "spotify",
+    "hashicorp", "docker", "cncf", "prometheus", "grafana", "elastic",
+    "redis", "ClickHouse", "nginx", "traefik", "caddyserver", "vercel", "netlify",
+    "cloudflare", "digitalocean", "linode", "hetzneronline", "ovh",
+    "rails", "django", "laravel", "spring-projects", "dotnet", "JetBrains",
+    "jenkinsci", "gitlabhq", "bitnami", "bitwarden",
+    "obsproject", "godotengine", "blender", "gimp", "inkscape", "kde",
+    "gnome", "freedesktop", "wayland", "xorg", "swaywm",
+    "neovim", "vim", "emacs-mirror", "helix-editor", "zed-industries",
+    "astral-sh", "charliermarsh", "BurntSushi", "sharkdp", "junegunn",
+)
+
+
+def _seed_user(login: str) -> dict[str, Any]:
+    return {
+        "login": login,
+        "name": login,
+        "company": None,
+        "bio": None,
+        "blog": None,
+        "location": None,
+        "html_url": f"https://github.com/{login}",
+        "public_repos": 1,
+        "repos": [{"name": login, "language": None, "description": None, "stargazers_count": 0}],
+    }
+
+
+def fetch_active_github_users(
+    client: httpx.Client, n: int, *, seed: int, allow_seeds: bool = True
+) -> list[dict[str, Any]]:
     """Collect users that have public repos and recent activity signals."""
     rng = random.Random(seed)
     # Search queries biased toward accounts with repos
@@ -115,7 +158,11 @@ def fetch_active_github_users(client: httpx.Client, n: int, *, seed: int) -> lis
     found: dict[str, dict[str, Any]] = {}
     page = 1
     rate_backoff = 5.0
-    while len(found) < n and page <= 20:
+    search_failures = 0
+    use_search = bool(os.getenv("GITHUB_TOKEN")) or not allow_seeds
+    if not use_search:
+        print("no GITHUB_TOKEN — using curated public seed logins", flush=True)
+    while use_search and len(found) < n and page <= 20:
         q = rng.choice(queries)
         resp = client.get(
             "https://api.github.com/search/users",
@@ -124,14 +171,19 @@ def fetch_active_github_users(client: httpx.Client, n: int, *, seed: int) -> lis
             timeout=30.0,
         )
         if resp.status_code in {403, 429}:
+            search_failures += 1
             retry_after = resp.headers.get("Retry-After")
             wait = float(retry_after) if retry_after and retry_after.isdigit() else rate_backoff
             print(f"github rate-limited status={resp.status_code} sleep={wait:.0f}s", flush=True)
-            time.sleep(wait)
+            if allow_seeds and search_failures >= 2:
+                print("falling back to curated public GitHub seed logins", flush=True)
+                break
+            time.sleep(min(wait, 30.0))
             rate_backoff = min(rate_backoff * 1.5, 120.0)
             continue
         resp.raise_for_status()
         rate_backoff = 5.0
+        search_failures = 0
         for item in resp.json().get("items") or []:
             login = item.get("login")
             if not login or login in found:
@@ -186,6 +238,62 @@ def fetch_active_github_users(client: httpx.Client, n: int, *, seed: int) -> lis
             time.sleep(0.2)
         page += 1
         time.sleep(0.5)
+
+    if allow_seeds and len(found) < n:
+        seeds = list(dict.fromkeys(_SEED_LOGINS))  # preserve order, unique
+        rng.shuffle(seeds)
+        live = bool(os.getenv("GITHUB_TOKEN"))
+        for login in seeds:
+            if login in found:
+                continue
+            if not live:
+                found[login] = _seed_user(login)
+            else:
+                detail = client.get(
+                    f"https://api.github.com/users/{login}",
+                    headers=github_headers(),
+                    timeout=20.0,
+                )
+                if detail.status_code == 200:
+                    user = detail.json()
+                    repos = client.get(
+                        f"https://api.github.com/users/{login}/repos",
+                        params={"sort": "updated", "per_page": 5},
+                        headers=github_headers(),
+                        timeout=20.0,
+                    )
+                    repo_payload = repos.json() if repos.status_code == 200 else []
+                    if not isinstance(repo_payload, list):
+                        repo_payload = []
+                    found[login] = {
+                        "login": login,
+                        "name": user.get("name") or login,
+                        "company": user.get("company"),
+                        "bio": user.get("bio"),
+                        "blog": user.get("blog"),
+                        "location": user.get("location"),
+                        "html_url": user.get("html_url") or f"https://github.com/{login}",
+                        "public_repos": user.get("public_repos"),
+                        "repos": [
+                            {
+                                "name": r.get("name"),
+                                "language": r.get("language"),
+                                "description": r.get("description"),
+                                "stargazers_count": r.get("stargazers_count"),
+                            }
+                            for r in repo_payload[:5]
+                            if isinstance(r, dict)
+                        ]
+                        or _seed_user(login)["repos"],
+                    }
+                else:
+                    found[login] = _seed_user(login)
+            if len(found) % 20 == 0 or len(found) >= n:
+                print(f"seed users {len(found)}/{n}", flush=True)
+            if len(found) >= n:
+                break
+            if live:
+                time.sleep(0.05)
     return list(found.values())[:n]
 
 
