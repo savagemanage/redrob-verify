@@ -8,6 +8,8 @@ cd "$ROOT"
 
 export PYTHONIOENCODING=utf-8
 export PYTHONUTF8=1
+# Line-buffer progress from eval loops over SSH / nohup.
+export PYTHONUNBUFFERED=1
 export PATH="${HOME}/.local/bin:/c/Python313/Scripts:${PATH:-}"
 
 UV="${UV:-uv}"

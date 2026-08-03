@@ -139,16 +139,30 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
     by_country_items: dict[str, list[dict]] = defaultdict(list)
     lang_used = str((cfg.get("ocr") or {}).get("lang") or "en")
     lang_by_country = dict((cfg.get("ocr") or {}).get("lang_by_country") or {})
+    timeout_s = float(cfg.get("timeout_seconds", 30))
+    n_total = len(records)
+    progress_every = max(1, int((cfg.get("ocr") or {}).get("eval_progress_every") or 1))
+    results_root.mkdir(parents=True, exist_ok=True)
+    progress_path = results_root / "tc1_cer_progress.jsonl"
+    # Truncate so a fresh run is easy to `tail -f`
+    progress_path.write_text("", encoding="utf-8")
+
+    print(
+        f"TC1 starting: n={n_total} timeout={timeout_s}s "
+        f"endpoint={cfg['endpoints'].get('ocr')} progress={progress_path}",
+        flush=True,
+    )
 
     async with ApiClient(
         cfg["endpoints"],
-        timeout_seconds=float(cfg.get("timeout_seconds", 30)),
+        timeout_seconds=timeout_s,
         retry_count=int(cfg.get("retry_count", 3)),
     ) as client:
-        for rec in records:
+        for idx, rec in enumerate(records, start=1):
             img = data_root / "1_ocr" / rec.path
             country = country_for_doc_type(rec.doc_type) or "unknown"
             script = rec.script or script_for_doc_type(rec.doc_type) or "unknown"
+            print(f"[{idx}/{n_total}] {rec.id} country={country} …", flush=True)
             try:
                 resp, latency_ms = await client.ocr_extract(
                     img, record_id=rec.id, doc_type=rec.doc_type
@@ -158,6 +172,15 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
                 hyp_fields = resp.get("fields") if isinstance(resp.get("fields"), dict) else {}
             except Exception as e:
                 fatals.append(f"{rec.id}: {e}")
+                print(f"[{idx}/{n_total}] {rec.id} FAIL {e}", flush=True)
+                with progress_path.open("a", encoding="utf-8") as pf:
+                    pf.write(
+                        json.dumps(
+                            {"i": idx, "n": n_total, "id": rec.id, "ok": False, "error": str(e)},
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
                 continue
             fcer, field_rows = field_cer(hyp_fields, rec.gt_fields, page_hyp=hyp)
             item_lang = lang_by_country.get(country) or lang_used
@@ -175,6 +198,31 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
             per_item.append(item)
             by_script_items[str(script)].append(item)
             by_country_items[str(country)].append(item)
+            running = _aggregate_field_cer(per_item)
+            if idx == 1 or idx == n_total or idx % progress_every == 0:
+                print(
+                    f"[{idx}/{n_total}] {rec.id} ok cer_field={fcer} "
+                    f"running={running} ms={latency_ms:.0f} text_len={len(hyp)}",
+                    flush=True,
+                )
+            with progress_path.open("a", encoding="utf-8") as pf:
+                pf.write(
+                    json.dumps(
+                        {
+                            "i": idx,
+                            "n": n_total,
+                            "id": rec.id,
+                            "ok": True,
+                            "cer_field": fcer,
+                            "running_cer_field": running,
+                            "latency_ms": latency_ms,
+                            "country": country,
+                            "script": script,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
     if fatals:
         print(f"FATAL: {len(fatals)} OCR call(s) failed — metrics not computed", file=sys.stderr)

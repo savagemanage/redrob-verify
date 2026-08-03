@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +89,9 @@ async def extract(request: Request) -> dict[str, Any]:
             body = OcrBody.model_validate(await request.json())
         except (ValueError, TypeError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
-        return PIPELINE.extract(
+        # Paddle inference is sync/CPU-bound; keep the event loop free for /v1/meta.
+        return await asyncio.to_thread(
+            PIPELINE.extract,
             body.path or body.base64 or "",
             body.doc_type,
             preprocess_override=body.preprocess,
@@ -100,7 +103,11 @@ async def extract(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="multipart request requires file")
     content = await upload.read()
     doc_type = form.get("doc_type")
-    return PIPELINE.extract(content, str(doc_type) if doc_type else None)
+    return await asyncio.to_thread(
+        PIPELINE.extract,
+        content,
+        str(doc_type) if doc_type else None,
+    )
 
 
 def main() -> None:
