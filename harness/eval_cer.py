@@ -154,14 +154,48 @@ def _stratified_by_country(records: list[Any], max_n: int, *, seed: int) -> list
     return selected[:max_n]
 
 
+def _filter_eval_records(records: list[Any], ocr_cfg: dict[str, Any]) -> list[Any]:
+    """Keep only scripts/countries relevant to the product eval scope."""
+    scripts = ocr_cfg.get("eval_scripts")
+    countries = ocr_cfg.get("eval_countries")
+    script_allow = {str(s).lower() for s in scripts} if scripts else None
+    country_allow = {str(c).lower() for c in countries} if countries else None
+    if script_allow is None and country_allow is None:
+        return records
+    out: list[Any] = []
+    for rec in records:
+        country = (country_for_doc_type(rec.doc_type) or "unknown").lower()
+        script = str(rec.script or script_for_doc_type(rec.doc_type) or "unknown").lower()
+        if script_allow is not None and script not in script_allow:
+            continue
+        if country_allow is not None and country not in country_allow:
+            continue
+        out.append(rec)
+    return out
+
+
 async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -> dict:
     cfg = load_config(cfg_path)
     data_root = resolve_data_root(cfg)
     results_root = resolve_results_root(cfg)
     expected = (cfg.get("expected_counts") or {}).get("1_ocr")
     records = load_ocr_manifest(data_root / "1_ocr", expected=expected)
-    max_n = (cfg.get("ocr") or {}).get("eval_max_samples")
-    sample_mode = str((cfg.get("ocr") or {}).get("eval_sample_mode") or "stratified").lower()
+    ocr_cfg = dict(cfg.get("ocr") or {})
+    before = len(records)
+    records = _filter_eval_records(records, ocr_cfg)
+    if len(records) != before:
+        print(
+            f"TC1 filter: {before} → {len(records)} "
+            f"(eval_scripts={ocr_cfg.get('eval_scripts')} "
+            f"eval_countries={ocr_cfg.get('eval_countries')})",
+            flush=True,
+        )
+    if not records:
+        raise EvalTransportError(
+            "TC1 filter removed every record — check eval_scripts/eval_countries"
+        )
+    max_n = ocr_cfg.get("eval_max_samples")
+    sample_mode = str(ocr_cfg.get("eval_sample_mode") or "stratified").lower()
     seed = int(cfg.get("seed") or 42)
     if max_n is not None and int(max_n) > 0 and len(records) > int(max_n):
         if sample_mode in {"legacy", "head", "prefix"}:
@@ -173,7 +207,7 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
             if len(records) < int(max_n):
                 records = (scans + photos + other)[: int(max_n)]
             print(
-                f"TC1 subsample (legacy): {len(records)} / manifest "
+                f"TC1 subsample (legacy): {len(records)} / filtered "
                 f"(eval_max_samples={max_n})",
                 flush=True,
             )
@@ -187,7 +221,7 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
                 by_c[c] += 1
                 by_s[str(s)] += 1
             print(
-                f"TC1 subsample (stratified): {len(records)} / manifest "
+                f"TC1 subsample (stratified): {len(records)} / filtered "
                 f"(eval_max_samples={max_n} seed={seed})",
                 flush=True,
             )

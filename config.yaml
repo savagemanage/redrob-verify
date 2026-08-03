@@ -28,7 +28,10 @@ ocr:
   vl:
     model_id: PaddlePaddle/PaddleOCR-VL-1.6
     pipeline_version: "v1.6"
-  # Stratified-by-country subsample for Gate 1. null = full 3000.
+  # India-relevant proxy: Latin/English MIDV only (drop Greek/Cyrillic).
+  # Full latin pool is 2100; stratified 100 ≈ 14/country across 7 latin countries.
+  eval_scripts: [latin]
+  # eval_countries: [alb, aze, esp, est, fin, lva, svk]  # optional further cut
   eval_max_samples: 100
   eval_sample_mode: stratified   # stratified | legacy
   preprocess:
