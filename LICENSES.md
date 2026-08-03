@@ -57,7 +57,23 @@ Stage-1 archives used by default: `scan_upright.tar`, `scan_rotated.tar`,
 
 ## Forgery — backends
 
-### Default research backend: TruFor (GRIP-UNINA, nonprofit-only)
+### Publishable path: ForgeryNet (Apache-oriented)
+
+In-repo `services/forgery/model.py` + **torchvision ResNet-50 ImageNet** init
+([torchvision](https://github.com/pytorch/vision) BSD-3 / redistributable weights) + our
+FFT/HOG heads and optional mask head trained on synthetic `gen_forgery` masks.
+
+| Item | Notes |
+|------|--------|
+| Code license | Apache-2.0 (this repo) |
+| Backbone init | torchvision `ResNet50_Weights.IMAGENET1K_V2` (BSD-3) |
+| Fine-tune data | MIDV authentic (dataset terms) + synthetic gen_forgery |
+| Default weights file | `models/forgery/forgerynet_apache.pth` (not in git) |
+| Hugging Face | **Allowed** for this checkpoint family once TC2/TC3 clears — document ImageNet + MIDV + synthetic provenance in the model card |
+
+Switch service with `forgery.backend: forgery_net` and matching `image_size`.
+
+### Research-only backend: TruFor (GRIP-UNINA, nonprofit-only)
 
 The wired forgery service may use **TruFor** (`forgery.backend: trufor`) with a
 checkpoint fine-tuned on our synthetic `gen_forgery` + MIDV authentic set.
@@ -73,12 +89,6 @@ checkpoint fine-tuned on our synthetic `gen_forgery` + MIDV authentic set.
 Code in this repository (FastAPI glue, harness, training scripts) remains Apache-2.0.
 That does **not** re-license TruFor source or weights. Downstream users who enable
 `backend: trufor` must obtain TruFor themselves and accept GRIP-UNINA terms.
-
-### Apache-oriented alternative: ForgeryNet (in-repo)
-
-`forgery.backend: forgery_net` trains/serves the in-repo ForgeryNet (`services/forgery/model.py`).
-Use this when you need a path without TruFor’s nonprofit restriction. On the current
-in-domain set it did **not** clear the joint TC2/TC3 gate; TruFor fine-tune did.
 
 ### Do not treat as shippable product weights
 

@@ -24,6 +24,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch import Tensor, nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from harness.config_util import REPO_ROOT, load_config, resolve_data_root, resolve_results_root
@@ -40,6 +41,7 @@ ROC_GATE_FPR = 0.348
 class Sample:
     path: Path
     label: int
+    mask_path: Path | None = None
 
 
 def _cache_key(path: Path, image_size: int) -> str:
@@ -55,6 +57,17 @@ def _load_resized_rgb(path: Path, image_size: int) -> Tensor:
             dtype=np.float32,
         ) / 255.0
     return torch.from_numpy(pixels).permute(2, 0, 1).contiguous()
+
+
+def _load_resized_mask(path: Path | None, image_size: int) -> Tensor:
+    if path is None or not path.is_file():
+        return torch.zeros(1, image_size, image_size, dtype=torch.float32)
+    with Image.open(path) as image:
+        arr = np.asarray(
+            image.convert("L").resize((image_size, image_size), Image.Resampling.NEAREST),
+            dtype=np.float32,
+        )
+    return torch.from_numpy((arr > 127).astype(np.float32))[None]
 
 
 def _cached_tensor(path: Path, image_size: int, cache_dir: Path) -> Tensor:
@@ -76,9 +89,11 @@ def _materialize(
     label: str,
     device: torch.device,
     gpu_resident: bool,
+    with_masks: bool,
 ) -> TensorDataset:
     """Decode once (or hit cache); optionally pin the full split on the GPU."""
     images: list[Tensor] = []
+    masks: list[Tensor] = []
     labels: list[int] = []
     t0 = time.perf_counter()
     hits = 0
@@ -87,20 +102,36 @@ def _materialize(
         if cache_path.is_file():
             hits += 1
         images.append(_cached_tensor(sample.path, image_size, cache_dir))
+        if with_masks:
+            masks.append(_load_resized_mask(sample.mask_path, image_size))
         labels.append(sample.label)
         if index % 200 == 0 or index == len(samples):
             print(f"  cache[{label}] {index}/{len(samples)} hits={hits}", flush=True)
     stacked = torch.stack(images)
     label_tensor = torch.tensor(labels, dtype=torch.float32)
+    if with_masks:
+        mask_tensor = torch.stack(masks)
+        if gpu_resident and device.type == "cuda":
+            stacked = stacked.to(device, non_blocking=True)
+            mask_tensor = mask_tensor.to(device, non_blocking=True)
+            label_tensor = label_tensor.to(device, non_blocking=True)
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - t0
+        print(
+            f"  cache[{label}] done n={len(samples)} hits={hits} "
+            f"shape={tuple(stacked.shape)} masks={tuple(mask_tensor.shape)} "
+            f"gpu_resident={gpu_resident} s={elapsed:.1f}",
+            flush=True,
+        )
+        return TensorDataset(stacked, mask_tensor, label_tensor)
     if gpu_resident and device.type == "cuda":
         stacked = stacked.to(device, non_blocking=True)
         label_tensor = label_tensor.to(device, non_blocking=True)
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - t0
     print(
-        f"  cache[{label}] ready n={len(samples)} hits={hits}/{len(samples)} "
-        f"gpu_resident={bool(gpu_resident and device.type == 'cuda')} "
-        f"in {elapsed:.1f}s",
+        f"  cache[{label}] done n={len(samples)} hits={hits} "
+        f"shape={tuple(stacked.shape)} gpu_resident={gpu_resident} s={elapsed:.1f}",
         flush=True,
     )
     return TensorDataset(stacked, label_tensor)
@@ -171,7 +202,7 @@ def _samples_train(data_root: Path, train_forged_root: Path) -> list[Sample]:
     """
     authentic_dir = data_root / "2_forgery" / "authentic"
     authentic = [
-        Sample(path, 0)
+        Sample(path, 0, None)
         for path in sorted(authentic_dir.glob("*"))
         if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
     ]
@@ -196,7 +227,15 @@ def _samples_train(data_root: Path, train_forged_root: Path) -> list[Sample]:
             flush=True,
         )
     forged_records = load_forgery_manifest(train_forged_root)
-    forged = [Sample(train_forged_root / record.path, 1) for record in forged_records if record.label == 1]
+    forged = [
+        Sample(
+            train_forged_root / record.path,
+            1,
+            (train_forged_root / record.mask_path) if record.mask_path else None,
+        )
+        for record in forged_records
+        if record.label == 1
+    ]
     if not authentic:
         raise RuntimeError(f"no authentic images in {authentic_dir}")
     if not forged:
@@ -209,7 +248,10 @@ def _samples_train(data_root: Path, train_forged_root: Path) -> list[Sample]:
 
 def _samples_eval(data_root: Path) -> list[Sample]:
     eval_root = data_root / "2_forgery"
-    return [Sample(eval_root / record.path, int(record.label)) for record in load_forgery_manifest(eval_root)]
+    return [
+        Sample(eval_root / record.path, int(record.label), None)
+        for record in load_forgery_manifest(eval_root)
+    ]
 
 
 def _resolve_device(*, allow_cpu: bool) -> torch.device:
@@ -235,8 +277,9 @@ def _evaluate(
     scores: list[float] = []
     model.eval()
     with torch.inference_mode():
-        for images, batch_labels in loader:
-            images = images.to(device, non_blocking=True)
+        for batch in loader:
+            images = batch[0].to(device, non_blocking=True)
+            batch_labels = batch[-1]
             with torch.amp.autocast("cuda", enabled=use_amp and device.type == "cuda"):
                 logits = model(images)
             scores.extend(torch.sigmoid(logits.float()).cpu().tolist())
@@ -264,10 +307,10 @@ def _profile_one_epoch(
     if device.type == "cuda":
         torch.cuda.synchronize()
     epoch_t0 = time.perf_counter()
-    for images, labels in train_loader:
+    for batch in train_loader:
         t_data = time.perf_counter()
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
+        images = batch[0].to(device, non_blocking=True)
+        labels = batch[-1].to(device, non_blocking=True)
         if device.type == "cuda":
             torch.cuda.synchronize()
         data_s += time.perf_counter() - t_data
@@ -379,11 +422,25 @@ def train(args: argparse.Namespace) -> dict:
     cache_dir = Path(args.cache_dir) if args.cache_dir else data_root / "_cache" / f"forgery_{args.image_size}"
     print(f"image_cache={cache_dir}", flush=True)
     gpu_resident = bool(args.gpu_resident) and device.type == "cuda"
+    loc_weight = float(getattr(args, "loc_weight", 1.0))
+    use_masks = loc_weight > 0.0
     train_ds = _materialize(
-        train_samples, args.image_size, cache_dir, label="train", device=device, gpu_resident=gpu_resident
+        train_samples,
+        args.image_size,
+        cache_dir,
+        label="train",
+        device=device,
+        gpu_resident=gpu_resident,
+        with_masks=use_masks,
     )
     val_ds = _materialize(
-        validation_samples, args.image_size, cache_dir, label="val", device=device, gpu_resident=gpu_resident
+        validation_samples,
+        args.image_size,
+        cache_dir,
+        label="val",
+        device=device,
+        gpu_resident=gpu_resident,
+        with_masks=False,
     )
 
     train_loader = DataLoader(
@@ -400,46 +457,69 @@ def train(args: argparse.Namespace) -> dict:
         num_workers=0,
         pin_memory=device.type == "cuda" and not gpu_resident,
     )
-    model = ForgeryNet(imagenet=bool(args.imagenet)).to(device)
+    model = ForgeryNet(imagenet=bool(args.imagenet), loc_head=use_masks).to(device)
     n_pos = sum(1 for s in train_samples if s.label == 1)
     n_neg = len(train_samples) - n_pos
     pos_weight = torch.tensor([n_neg / max(n_pos, 1)], device=device, dtype=torch.float32)
-    print(f"imagenet={bool(args.imagenet)} pos_weight={float(pos_weight):.3f} (neg={n_neg} pos={n_pos})", flush=True)
+    print(
+        f"imagenet={bool(args.imagenet)} loc_weight={loc_weight} "
+        f"pos_weight={float(pos_weight):.3f} (neg={n_neg} pos={n_pos})",
+        flush=True,
+    )
     try:
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay, fused=device.type == "cuda"
         )
     except TypeError:
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    det_loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    loc_loss_fn = nn.BCEWithLogitsLoss()
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(args.epochs, 1))
     best_width, best_auc, history = -1.0, -1.0, []
     collapse_streak = 0
-    output_path = Path(args.output or (REPO_ROOT / "models" / "forgery" / "best.pth"))
+    output_path = Path(args.output or (REPO_ROOT / "models" / "forgery" / "forgerynet_apache.pth"))
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     profile_row: dict[str, float] | None = None
     if args.profile_one_epoch:
         profile_row = _profile_one_epoch(
-            model, optimizer, loss_fn, train_loader, validation_loader, device, use_amp=use_amp
+            model, optimizer, det_loss_fn, train_loader, validation_loader, device, use_amp=use_amp
         )
 
     for epoch in range(1, args.epochs + 1):
         model.train()
         losses: list[float] = []
         epoch_t0 = time.perf_counter()
-        for images, labels in train_loader:
+        for batch in train_loader:
+            if use_masks:
+                images, masks, labels = batch
+                masks = masks.to(device, non_blocking=True)
+            else:
+                images, labels = batch
+                masks = None
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             if args.augment:
                 # Cheap geometry/noise only — keeps FFT/HOG meaningful.
                 if torch.rand(1, device=device).item() < 0.5:
                     images = torch.flip(images, dims=(-1,))
+                    if masks is not None:
+                        masks = torch.flip(masks, dims=(-1,))
                 images = (images + 0.02 * torch.randn_like(images)).clamp(0.0, 1.0)
             optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=use_amp):
-                loss = loss_fn(model(images), labels)
+                logits, loc_logits = model.forward_features(images)
+                det_loss = det_loss_fn(logits, labels)
+                if use_masks and loc_logits is not None and masks is not None:
+                    if loc_logits.shape[-2:] != masks.shape[-2:]:
+                        loc_logits = F.interpolate(
+                            loc_logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
+                        )
+                    loc_loss = loc_loss_fn(loc_logits, masks)
+                else:
+                    loc_loss = det_loss * 0.0
+                loss = det_loss + loc_weight * loc_loss
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -537,12 +617,13 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--image-size", type=int, default=224, help="must match serving (224)")
+    parser.add_argument("--image-size", type=int, default=320, help="must match serving image_size")
     parser.add_argument("--max-samples", type=int, default=None, help="cap train set (debug only)")
     parser.add_argument("--learning-rate", type=float, default=3e-5)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--collapse-patience", type=int, default=2)
+    parser.add_argument("--loc-weight", type=float, default=1.0, help="mask BCE weight (0 disables loc head)")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--train-forged-root",
