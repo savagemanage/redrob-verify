@@ -17,6 +17,8 @@ build/
 .env
 .env.*
 !.env.example
+.gpu.env
+!.gpu.env.example
 
 # Internal / private planning docs (never publish)
 PROJECT_BRIEF.md

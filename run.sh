@@ -207,6 +207,11 @@ case "$cmd" in
     run_preflight
     "$UV" run python -m tools.smoke_ocr --config "$CONFIG" "$@"
     ;;
+  sync-gpu)
+    # Laptop → origin push, then SSH to GPU and ff-only pull.
+    # Optional: SYNC_REBUILD=1 SYNC_SERVICES=ocr|all
+    bash "$ROOT/tools/sync_gpu.sh" "$@"
+    ;;
   bootstrap-gpu)
     # Fresh GPU host: deps → models → MIDV data → docker up → OCR smoke.
     # Skip steps: SKIP_MIDV=1 SKIP_UP=1 SKIP_SMOKE=1
@@ -436,6 +441,7 @@ EOF
 redrob-verify runner
 
   ./run.sh bootstrap-gpu   # GPU host one-shot: sync → models → MIDV → up → smoke-ocr
+  ./run.sh sync-gpu        # laptop: git push + SSH pull on GPU (see tools/sync_gpu.sh)
   ./run.sh setup           # uv sync
   ./run.sh up              # docker compose up (checks host ports; does not kill)
   ./run.sh down            # docker compose down
@@ -463,6 +469,8 @@ redrob-verify runner
 Environment:
   UV, CONFIG, JMETER_HOME, IDENTITY_HOST, IDENTITY_PORT, IDENTITY_SOURCE_DELAY_SEC
   SKIP_MIDV=1 SKIP_UP=1 SKIP_SMOKE=1   # bootstrap-gpu only
+  GPU_SSH_HOST GPU_SSH_USER GPU_SSH_KEY GPU_REPO_DIR   # sync-gpu
+  SYNC_PUSH=0 SYNC_REBUILD=1 SYNC_SERVICES=ocr|all     # sync-gpu
 EOF
     ;;
   *)
