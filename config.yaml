@@ -23,13 +23,14 @@ ocr:
   host: 0.0.0.0
   port: 8001
   lang: en   # never 'ch' — Latin MIDV / Indian docs
-  backend: paddleocr_vl   # paddleocr_classic | paddleocr_vl
+  backend: paddleocr_classic   # paddleocr_classic | paddleocr_vl
   # Pin VL to tag 1.6 — no auto-latest
   vl:
     model_id: PaddlePaddle/PaddleOCR-VL-1.6
     pipeline_version: "v1.6"
-  # Full 1_ocr (3000). Set an int only for smoke/feel — overnight gate forbids subsample.
-  eval_max_samples: null
+  # Stratified-by-country subsample for Gate 1. null = full 3000.
+  eval_max_samples: 100
+  eval_sample_mode: stratified   # stratified | legacy
   preprocess:
     deskew: false
     perspective: false

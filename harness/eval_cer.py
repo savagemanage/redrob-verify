@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import random
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -113,6 +114,46 @@ def _aggregate_field_cer(items: list[dict]) -> float | None:
     return sum(float(it["cer_field"]) for it in field_items) / len(field_items)
 
 
+def _stratified_by_country(records: list[Any], max_n: int, *, seed: int) -> list[Any]:
+    """Take up to max_n records with equal per-country quotas; mix scan/photo inside each."""
+    by_country: dict[str, list[Any]] = defaultdict(list)
+    for rec in records:
+        country = country_for_doc_type(rec.doc_type) or "unknown"
+        by_country[country].append(rec)
+    countries = sorted(by_country.keys())
+    if not countries:
+        return []
+    rng = random.Random(seed)
+    base = max_n // len(countries)
+    rem = max_n % len(countries)
+    selected: list[Any] = []
+    for i, country in enumerate(countries):
+        quota = base + (1 if i < rem else 0)
+        pool = list(by_country[country])
+        scans = [r for r in pool if "scan" in getattr(r, "id", "")]
+        photos = [r for r in pool if "photo" in getattr(r, "id", "")]
+        other = [r for r in pool if r not in scans and r not in photos]
+        rng.shuffle(scans)
+        rng.shuffle(photos)
+        rng.shuffle(other)
+        take: list[Any] = []
+        # Alternate scan/photo to avoid Albania-scan-only bias.
+        while len(take) < quota and (scans or photos or other):
+            if scans and (len(take) % 2 == 0 or not photos):
+                take.append(scans.pop())
+            elif photos:
+                take.append(photos.pop())
+            elif other:
+                take.append(other.pop())
+            elif scans:
+                take.append(scans.pop())
+            else:
+                break
+        selected.extend(take[:quota])
+    rng.shuffle(selected)
+    return selected[:max_n]
+
+
 async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -> dict:
     cfg = load_config(cfg_path)
     data_root = resolve_data_root(cfg)
@@ -120,15 +161,38 @@ async def run(cfg_path: Path | None = None, *, backend_tag: str | None = None) -
     expected = (cfg.get("expected_counts") or {}).get("1_ocr")
     records = load_ocr_manifest(data_root / "1_ocr", expected=expected)
     max_n = (cfg.get("ocr") or {}).get("eval_max_samples")
+    sample_mode = str((cfg.get("ocr") or {}).get("eval_sample_mode") or "stratified").lower()
+    seed = int(cfg.get("seed") or 42)
     if max_n is not None and int(max_n) > 0 and len(records) > int(max_n):
-        scans = [r for r in records if "scan" in r.id]
-        photos = [r for r in records if "photo" in r.id]
-        other = [r for r in records if r not in scans and r not in photos]
-        half = int(max_n) // 2
-        records = scans[:half] + photos[: int(max_n) - min(half, len(scans))]
-        if len(records) < int(max_n):
-            records = (scans + photos + other)[: int(max_n)]
-        print(f"TC1 subsample: {len(records)} / manifest (eval_max_samples={max_n})")
+        if sample_mode in {"legacy", "head", "prefix"}:
+            scans = [r for r in records if "scan" in r.id]
+            photos = [r for r in records if "photo" in r.id]
+            other = [r for r in records if r not in scans and r not in photos]
+            half = int(max_n) // 2
+            records = scans[:half] + photos[: int(max_n) - min(half, len(scans))]
+            if len(records) < int(max_n):
+                records = (scans + photos + other)[: int(max_n)]
+            print(
+                f"TC1 subsample (legacy): {len(records)} / manifest "
+                f"(eval_max_samples={max_n})",
+                flush=True,
+            )
+        else:
+            records = _stratified_by_country(records, int(max_n), seed=seed)
+            by_c: dict[str, int] = defaultdict(int)
+            by_s: dict[str, int] = defaultdict(int)
+            for rec in records:
+                c = country_for_doc_type(rec.doc_type) or "unknown"
+                s = rec.script or script_for_doc_type(rec.doc_type) or "unknown"
+                by_c[c] += 1
+                by_s[str(s)] += 1
+            print(
+                f"TC1 subsample (stratified): {len(records)} / manifest "
+                f"(eval_max_samples={max_n} seed={seed})",
+                flush=True,
+            )
+            print(f"  by_country={dict(sorted(by_c.items()))}", flush=True)
+            print(f"  by_script={dict(sorted(by_s.items()))}", flush=True)
     tta_valid = tta_valid_for_records(records)
     origins = origin_distribution(records)
     target = float(cfg["targets"]["tc1_cer_max"])

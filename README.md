@@ -32,7 +32,7 @@ A host-side harness runs reproducible metrics and writes JSON (+ optional HTML r
   results/*.json  report.html
 ```
 
-Default OCR backend: **PaddleOCR-VL-1.6**. Face: **OpenCV Zoo YuNet + SFace**.
+Default OCR backend: **PaddleOCR classic** (VL available via `ocr.backend`). Face: **OpenCV Zoo YuNet + SFace**.
 
 ## Requirements
 
