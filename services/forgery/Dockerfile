@@ -1,8 +1,5 @@
 # Forgery: PyTorch with Blackwell (sm_120) support via CUDA 12.8 wheels.
 # Host must pass a GPU via compose `gpus: all`.
-#
-# Override at build time if needed:
-#   docker compose build --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128
 ARG CUDA_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
 FROM ${CUDA_IMAGE}
 
@@ -20,16 +17,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3 /usr/bin/python
+    && rm -rf /var/lib/apt/lists/*
 
-# Isolate from distro site-packages; install torch first from the CUDA index.
-RUN python -m pip install --no-cache-dir -U pip \
-    && python -m pip install --no-cache-dir \
+# Ubuntu 24.04 marks system Python as externally managed (PEP 668).
+RUN python3 -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+ENV VIRTUAL_ENV=/opt/venv
+
+RUN pip install --no-cache-dir -U pip \
+    && pip install --no-cache-dir \
         --index-url "${TORCH_INDEX}" \
         "${TORCH_PACKAGE}" \
         "${TORCHVISION_PACKAGE}" \
-    && python -m pip install --no-cache-dir \
+    && pip install --no-cache-dir \
         "fastapi>=0.115.0" \
         "uvicorn[standard]>=0.30.0" \
         "python-multipart>=0.0.9" \
