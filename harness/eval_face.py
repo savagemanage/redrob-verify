@@ -180,9 +180,10 @@ async def run(cfg_path: Path | None = None) -> dict:
 
     margins = None
     if under_variation:
-        print("WARNING: 변이 과소, 임계값 확정 불가", flush=True)
+        print("WARNING: 변이 과소, 임계값 확정 불가 (calibration-only — do not freeze)", flush=True)
 
-    # Still compute interval / maximin for feel; lock prevents treating them as final.
+    # Metrics gate vs threshold lock are separate: MIDV can clear TC4/TC5 numbers
+    # while still blocking freeze / DS-3 trial lock.
     if sweep.infeasible:
         print()
         print("=" * 60)
@@ -193,20 +194,20 @@ async def run(cfg_path: Path | None = None) -> dict:
         recommended = None
         interval = None
         margins = None
-        report_infeasible = True
+        metrics_infeasible = True
     else:
         recommended = sweep.recommended
         interval = [sweep.t_min, sweep.t_max]
         rec_sens = sweep.recommended_metrics["sensitivity"]  # type: ignore[index]
         rec_acc = sweep.recommended_metrics["accuracy"]  # type: ignore[index]
         margins = sweep.recommended_margins
-        report_infeasible = bool(under_variation)
+        metrics_infeasible = False
         print()
         if under_variation:
             print("=" * 60)
-            print("INFEASIBLE: 변이 과소, 임계값 확정 불가")
+            print("THRESHOLD LOCK BLOCKED: 변이 과소, 임계값 확정 불가")
             print("=" * 60)
-            print("(feel only — interval / maximin below are NOT locked)")
+            print("(metrics below are feel/calibration — not DS-3 trial lock)")
         print(f"Feasible interval: [{sweep.t_min:.2f}, {sweep.t_max:.2f}]")
         print(f"Recommended threshold t*: {recommended:.2f}  (maximin normalised margin)")
         print(
@@ -242,7 +243,8 @@ async def run(cfg_path: Path | None = None) -> dict:
         ),
         "recommended_margins": margins,
         "min_normalized_margin": None if recommended is None else sweep.min_normalized_margin,
-        "infeasible": report_infeasible,
+        # Exit/report gate: joint metric targets only. Freeze still respects threshold_lock.
+        "infeasible": metrics_infeasible,
         "tc4_sensitivity": rec_sens,
         "tc5_accuracy": rec_acc,
         "freeze": collect_freeze(cfg),

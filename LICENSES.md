@@ -55,6 +55,38 @@ Stage-1 archives used by default: `scan_upright.tar`, `scan_rotated.tar`,
   portal terms before production or commercial redistribution.
 - Prefer author FTP for MIDV itself; use FMIDV only when you accept L3i terms.
 
+## Forgery — backends
+
+### Default research backend: TruFor (GRIP-UNINA, nonprofit-only)
+
+The wired forgery service may use **TruFor** (`forgery.backend: trufor`) with a
+checkpoint fine-tuned on our synthetic `gen_forgery` + MIDV authentic set.
+
+| Item | Notes |
+|------|--------|
+| Upstream | [grip-unina/TruFor](https://github.com/grip-unina/TruFor) |
+| License | GRIP-UNINA custom — **informational / nonprofit only**; industrial or profit-oriented use prohibited |
+| Weights in git? | **No.** Pretrained `trufor.pth.tar` and fine-tuned `models/forgery/trufor_finetuned.pth.tar` stay local / private |
+| Redistribution | Do **not** publish fine-tuned TruFor weights publicly (e.g. public Hugging Face). Cite GRIP-UNINA when reporting results that used TruFor |
+| Status in this repo | Optional eval/research path that cleared TC2/TC3 on in-domain MIDV+gen_forgery. **Not** an Apache-2.0 production claim |
+
+Code in this repository (FastAPI glue, harness, training scripts) remains Apache-2.0.
+That does **not** re-license TruFor source or weights. Downstream users who enable
+`backend: trufor` must obtain TruFor themselves and accept GRIP-UNINA terms.
+
+### Apache-oriented alternative: ForgeryNet (in-repo)
+
+`forgery.backend: forgery_net` trains/serves the in-repo ForgeryNet (`services/forgery/model.py`).
+Use this when you need a path without TruFor’s nonprofit restriction. On the current
+in-domain set it did **not** clear the joint TC2/TC3 gate; TruFor fine-tune did.
+
+### Do not treat as shippable product weights
+
+| Artifact | Issue |
+|----------|--------|
+| TruFor pretrained / fine-tuned `.pth.tar` | Nonprofit-only upstream; keep out of public model hubs |
+| Commercial “forgery API” outputs as training targets | Forbidden by project policy |
+
 ## Synthetic generators
 
 - `tools/gen_forgery.py`, `tools/gen_indian_docs.py`, `tools/gen_resumes.py` produce

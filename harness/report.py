@@ -413,22 +413,23 @@ def build_report(cfg: dict[str, Any] | None = None) -> Path:
     if tc45 and tc45.get("infeasible"):
         infeasible_notes.append(
             "<p class='infeasible'>TC4/TC5: <strong>INFEASIBLE</strong> — "
-            + (
-                "변이 과소, 임계값 확정 불가."
-                if tc45.get("under_variation_warning")
-                else "no threshold jointly satisfies sensitivity and accuracy targets."
-            )
-            + "</p>"
+            "no threshold jointly satisfies sensitivity and accuracy targets.</p>"
         )
     elif tc45 and tc45.get("feasible_interval"):
         a, b = tc45["feasible_interval"]
         margins = tc45.get("recommended_margins") or {}
         margin_txt = ", ".join(f"{k}={v:.4f}" for k, v in margins.items())
+        lock = tc45.get("threshold_lock") or "ok"
+        lock_note = (
+            " <strong>(threshold lock blocked — calibration only)</strong>"
+            if lock == "blocked"
+            else ""
+        )
         infeasible_notes.append(
             f"<p>TC4/TC5 feasible interval: [{a:.2f}, {b:.2f}], "
             f"recommended t*={tc45['recommended_threshold']:.2f} "
             f"(maximin; margins: {margin_txt}; "
-            f"min_norm={tc45.get('min_normalized_margin')})</p>"
+            f"min_norm={tc45.get('min_normalized_margin')}){lock_note}</p>"
         )
         if any(float(v) < 0.01 for v in margins.values()):
             infeasible_notes.append(

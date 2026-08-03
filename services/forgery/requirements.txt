@@ -9,3 +9,6 @@ opencv-python-headless>=4.10.0,<5
 pillow>=10.0.0
 torch>=2.2.0
 torchvision>=0.17.0
+# TruFor backend
+yacs>=0.1.8
+timm>=0.5.4

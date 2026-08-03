@@ -37,7 +37,9 @@ RUN pip install --no-cache-dir -U pip \
         "pyyaml>=6.0.2" \
         "numpy>=1.26.0,<2.3" \
         "opencv-python-headless>=4.10.0,<5" \
-        "pillow>=10.0.0"
+        "pillow>=10.0.0" \
+        "yacs>=0.1.8" \
+        "timm>=0.5.4"
 
 COPY services/common /app/services/common
 COPY services/forgery /app/services/forgery

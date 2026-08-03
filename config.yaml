@@ -14,7 +14,9 @@ targets:
   tc5_accuracy_min: 0.8
   tc6_seconds_max: 60.0
 thresholds:
-  forgery: null
+  # Mid-band of TruFor joint-feasible [0.01, 1.00] on in-domain n=1000 harness.
+  forgery: 0.50
+  # Face stays null until field_collected DS-3 (MIDV pairs cannot lock).
   face: null
 seed: 42
 timeout_seconds: 180.0
@@ -81,7 +83,12 @@ face:
 forgery:
   host: 0.0.0.0
   port: 8003
-  weights_path: models/forgery/best.pth
+  # forgery_net | trufor  (override with FORGERY_BACKEND)
+  backend: trufor
+  weights_path: models/forgery/trufor_finetuned.pth.tar
+  image_size: 512
+  # TruFor CMX source tree (override with TRUFOR_SRC; compose mounts at /trufor_src)
+  trufor_src: /trufor_src
   # FMIDV cross-domain gate — enable when FMIDV is ingested. MIDV-only feel runs use false.
   require_cross_domain: false
 identity:

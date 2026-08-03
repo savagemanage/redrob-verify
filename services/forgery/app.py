@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import base64
-import io
+import os
 import time
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import torch
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
 from services.common.meta import build_meta, sha256_file
-from services.forgery.model import ForgeryNet
+from services.forgery.backends import create_detector
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,6 +27,10 @@ def _load_config() -> dict[str, Any]:
 
 CFG = _load_config()
 FORGERY_CFG = dict(CFG.get("forgery") or {})
+if os.getenv("FORGERY_BACKEND"):
+    FORGERY_CFG["backend"] = os.environ["FORGERY_BACKEND"]
+if os.getenv("FORGERY_WEIGHTS"):
+    FORGERY_CFG["weights_path"] = os.environ["FORGERY_WEIGHTS"]
 
 
 def _select_device() -> torch.device:
@@ -50,14 +52,8 @@ def _select_device() -> torch.device:
 
 DEVICE = _select_device()
 torch.manual_seed(int(CFG.get("seed", 42)))
-MODEL = ForgeryNet().to(DEVICE).eval()
-WEIGHTS_PATH = REPO_ROOT / str(FORGERY_CFG.get("weights_path", "models/forgery/best.pth"))
-MODEL_STATUS = "untrained"
-if WEIGHTS_PATH.is_file():
-    checkpoint = torch.load(WEIGHTS_PATH, map_location=DEVICE, weights_only=True)
-    state = checkpoint.get("model_state", checkpoint) if isinstance(checkpoint, dict) else checkpoint
-    MODEL.load_state_dict(state)
-    MODEL_STATUS = "checkpoint"
+DETECTOR = create_detector(FORGERY_CFG, repo_root=REPO_ROOT, device=DEVICE)
+WEIGHTS_PATH = DETECTOR.weights_path
 
 app = FastAPI(title="redrob-verify forgery", version="0.1.0")
 
@@ -77,25 +73,14 @@ def _decode_json_image(value: str) -> bytes:
         raise HTTPException(status_code=422, detail="image must be a readable path or base64 image") from exc
 
 
-def _tensor_from_image(content: bytes) -> torch.Tensor:
-    try:
-        image = Image.open(io.BytesIO(content)).convert("RGB").resize((224, 224), Image.Resampling.BILINEAR)
-    except (UnidentifiedImageError, OSError) as exc:
-        raise HTTPException(status_code=422, detail="unable to decode image") from exc
-    pixels = np.asarray(image, dtype=np.float32) / 255.0
-    tensor = torch.from_numpy(pixels).permute(2, 0, 1).unsqueeze(0)
-    return tensor.to(DEVICE)
-
-
 def detect(content: bytes) -> dict[str, Any]:
     start = time.perf_counter()
-    image = _tensor_from_image(content)
-    with torch.inference_mode():
-        score = float(torch.sigmoid(MODEL(image)).item())
+    score = DETECTOR.score(content)
     return {
         "score": max(0.0, min(1.0, score)),
         "evidence": [],
         "latency_ms": round((time.perf_counter() - start) * 1000),
+        "backend": DETECTOR.name,
     }
 
 
@@ -104,8 +89,11 @@ async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "device": DEVICE.type,
-        "model_status": MODEL_STATUS,
-        "weights_path": str(WEIGHTS_PATH.relative_to(REPO_ROOT)),
+        "backend": DETECTOR.name,
+        "model_status": DETECTOR.status,
+        "weights_path": str(WEIGHTS_PATH.relative_to(REPO_ROOT))
+        if WEIGHTS_PATH.is_relative_to(REPO_ROOT)
+        else str(WEIGHTS_PATH),
     }
 
 
@@ -113,7 +101,7 @@ async def health() -> dict[str, Any]:
 async def meta() -> dict[str, Any]:
     return build_meta(
         service="forgery",
-        backend=f"forgery_net:{MODEL_STATUS}",
+        backend=f"{DETECTOR.name}:{DETECTOR.status}",
         model_sha256=sha256_file(WEIGHTS_PATH),
         extra={"device": DEVICE.type},
     )

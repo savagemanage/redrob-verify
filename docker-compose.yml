@@ -64,12 +64,17 @@ services:
     ports:
       - "8003:8003"
     gpus: all
+    environment:
+      FORGERY_BACKEND: ${FORGERY_BACKEND:-trufor}
+      TRUFOR_SRC: /trufor_src
     volumes:
       - ./data:/app/data:ro
       - ./config.yaml:/app/config.yaml:ro
       - ./models:/app/models:ro
       - ./services/forgery:/app/services/forgery:ro
       - ./services/common:/app/services/common:ro
+      # Host TruFor checkout (set TRUFOR_SRC in .gpu.env / shell). Required for backend=trufor.
+      - ${TRUFOR_SRC:-./vendor/trufor_src}:/trufor_src:ro
 
   identity:
     build:
