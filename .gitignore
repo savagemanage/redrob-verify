@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Internal / private planning docs (never publish)
+PROJECT_BRIEF.md
+HANDOFF.md
+WORKLOG.md
+STATUS.md
+MORNING.md
+BLOCKERS.md
+OVERNIGHT.md
+
+# Weights & model caches (fetch via tools/fetch_models.sh / PaddleX)
+*.pth
+*.onnx
+*.safetensors
+models/
+.paddlex/
+**/official_models/
+
+# Data: keep layout + manifests / READMEs only — never commit images or PII
+data/**/*
+!data/**/
+!data/**/manifest.jsonl
+!data/**/README.md
+!data/**/meta.json
+!data/_dev_fixtures/faces_smoke/README.md
+data/_cache/
+
+# Evaluation / local run outputs
+results/
+logs/
+*.log
+report.html
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# JMeter (local install under tools/)
+tools/apache-jmeter/
+tools/apache-jmeter-*/
+*.zip
+tools/jmeter.log
+
+# Docker / temp
+*.tar
+*.tar.gz
+
+# Training scratch (local only)
+data/2_forgery_gen/
+data/2_forgery_gen_v2/

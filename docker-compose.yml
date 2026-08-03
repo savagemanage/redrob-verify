@@ -1,0 +1,80 @@
+# Per-service dependency trees (never share a single venv across paddle/torch/opencv).
+# Host harness talks to published ports on 127.0.0.1; in-network DNS is ocr/face/forgery/identity.
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      OCR_URL: http://ocr:8001
+      FACE_URL: http://face:8002
+      FORGERY_URL: http://forgery:8003
+      IDENTITY_URL: http://identity:8004
+    depends_on:
+      - ocr
+      - face
+      - forgery
+      - identity
+
+  ocr:
+    build:
+      context: .
+      dockerfile: services/ocr/Dockerfile
+      args:
+        PADDLE_INDEX: https://www.paddlepaddle.org.cn/packages/stable/cu126/
+        PADDLE_PACKAGE: paddlepaddle-gpu==3.2.1
+    ports:
+      - "8001:8001"
+    gpus: all
+    volumes:
+      - ./data:/app/data:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./services/ocr:/app/services/ocr:ro
+      - ./services/common:/app/services/common:ro
+      - ocr_paddlex_cache:/root/.paddlex
+    environment:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: "True"
+      FLAGS_use_cuda: "1"
+  face:
+    build:
+      context: .
+      dockerfile: services/face/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      FACE_BACKEND: sface
+    volumes:
+      - ./data:/app/data:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/app/models:ro
+
+  forgery:
+    build:
+      context: .
+      dockerfile: services/forgery/Dockerfile
+    ports:
+      - "8003:8003"
+    gpus: all
+    volumes:
+      - ./data:/app/data:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/app/models:ro
+      - ./services/forgery:/app/services/forgery:ro
+
+  identity:
+    build:
+      context: .
+      dockerfile: services/identity/Dockerfile
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      IDENTITY_SOURCE_DELAY_SEC: ${IDENTITY_SOURCE_DELAY_SEC:-}
+
+volumes:
+  ocr_paddlex_cache:

@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+results
+data/_dev_fixtures
+data/.identity_cache
+tools/apache-jmeter*
+*.pth
+*.onnx
+.cursor
+agent-transcripts

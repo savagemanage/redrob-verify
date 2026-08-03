@@ -1,0 +1,8 @@
+# Face container: OpenCV Zoo SFace/YuNet only (no torch, no paddle).
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+pydantic>=2.8.0
+pyyaml>=6.0.2
+numpy>=1.26.0,<2.3
+opencv-python-headless>=4.10.0,<5

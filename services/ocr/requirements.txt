@@ -1,0 +1,14 @@
+# OCR container deps excluding paddlepaddle (installed from Paddle CPU index in Dockerfile).
+# This service uses PaddleOCR / PaddlePaddle ONLY. Do not install torch.
+# Pin: PaddleOCR-VL-1.6 requires paddleocr>=3.3 (pipeline_version="v1.6"). Do not auto-float.
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+pydantic>=2.8.0
+pyyaml>=6.0.2
+numpy>=1.26.0,<2.3
+opencv-python-headless>=4.10.0,<5
+pillow>=10.0.0
+paddleocr[doc-parser]>=3.6.0,<4
+huggingface_hub>=0.26.0
+safetensors>=0.4.0

@@ -1,0 +1,8 @@
+# Identity container: httpx + pdfplumber only (no torch, no paddle).
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+pydantic>=2.8.0
+pyyaml>=6.0.2
+httpx>=0.27.0
+pdfplumber>=0.11.0

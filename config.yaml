@@ -1,0 +1,93 @@
+data_root: data
+results_root: results
+# Host harness → published container ports. Compose DNS (ocr/face/…) is for gateway only.
+endpoints:
+  ocr: http://127.0.0.1:8001
+  face: http://127.0.0.1:8002
+  forgery: http://127.0.0.1:8003
+  identity: http://127.0.0.1:8004
+targets:
+  tc1_cer_max: 0.21
+  tc2_tpr_min: 0.88
+  tc3_f1_min: 0.79
+  tc4_sensitivity_min: 0.84
+  tc5_accuracy_min: 0.8
+  tc6_seconds_max: 60.0
+thresholds:
+  forgery: null
+  face: null
+seed: 42
+timeout_seconds: 180.0
+retry_count: 3
+ocr:
+  host: 0.0.0.0
+  port: 8001
+  lang: en   # never 'ch' — Latin MIDV / Indian docs
+  backend: paddleocr_vl   # paddleocr_classic | paddleocr_vl
+  # Pin VL to tag 1.6 — no auto-latest
+  vl:
+    model_id: PaddlePaddle/PaddleOCR-VL-1.6
+    pipeline_version: "v1.6"
+  # Full 1_ocr (3000). Set an int only for smoke/feel — overnight gate forbids subsample.
+  eval_max_samples: null
+  preprocess:
+    deskew: false
+    perspective: false
+    bg_remove: false
+    binarize: false
+    sharpen: false
+expected_counts:
+  1_ocr: 3000
+  2_forgery:
+    total: 1000
+    label_0: 500
+    label_1: 500
+  3_face:
+    total: 2000
+    same_true: 1000
+    same_false: 1000
+  4_resume: 100
+mock:
+  ocr_noise_rate: 0.08
+  forgery:
+    label_1: [3.0, 2.0]
+    label_0: [2.0, 3.0]
+  face:
+    same_true: [4.0, 2.0]
+    same_false: [2.0, 4.0]
+  identity_sleep_seconds: [0.01, 0.05]
+face:
+  host: 0.0.0.0
+  port: 8002
+  backend: sface
+  stub:
+    dim: 128
+    seed: 42
+  sface:
+    yunet_path: models/face/face_detection_yunet_2023mar.onnx
+    sface_path: models/face/face_recognition_sface_2021dec.onnx
+  detect:
+    fullframe_fallback: false
+  quality:
+    min_face_side_px: 40
+    min_laplacian_var: 50.0
+    max_yaw_deg: 30.0
+    max_pitch_deg: 25.0
+    min_eye_distance_ratio: 0.05
+forgery:
+  host: 0.0.0.0
+  port: 8003
+  weights_path: models/forgery/best.pth
+  # FMIDV cross-domain gate — enable when FMIDV is ingested. MIDV-only feel runs use false.
+  require_cross_domain: false
+identity:
+  host: 0.0.0.0
+  port: 8004
+  cache_dir: results/.identity_cache
+  cache_ttl_seconds: 3600
+  source_timeout_seconds: 8.0
+  score_weights:
+    github: 1.0
+    leetcode: 1.0
+    codeforces: 1.0
+    stackoverflow: 1.0
