@@ -68,51 +68,82 @@ def _ftp_size(ftp: FTP, remote: str) -> int | None:
         return None
 
 
-def download_file(ftp: FTP, remote: str, dest: Path) -> None:
+def _connect() -> FTP:
+    ftp = FTP(FTP_HOST, timeout=600)
+    ftp.login()
+    ftp.set_pasv(True)
+    return ftp
+
+
+def download_file(ftp: FTP, remote: str, dest: Path, *, retries: int = 8) -> FTP:
+    """Download with resume. Returns a live FTP (may reconnect after timeouts)."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     remote_size = _ftp_size(ftp, remote)
     offset = dest.stat().st_size if dest.is_file() else 0
     if remote_size is not None and offset == remote_size and remote_size > 0:
         print(f"skip (complete): {dest.name} ({offset} bytes)", flush=True)
-        return
+        return ftp
     if offset and remote_size is not None and offset > remote_size:
         dest.unlink()
         offset = 0
-    mode = "ab" if offset else "wb"
-    print(f"fetch {remote} → {dest} (resume={offset})", flush=True)
 
-    with dest.open(mode) as out:
-        def _write(block: bytes) -> None:
-            out.write(block)
-
-        if offset:
-            ftp.sendcmd(f"REST {offset}")
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        offset = dest.stat().st_size if dest.is_file() else 0
+        if remote_size is not None and offset == remote_size and remote_size > 0:
+            return ftp
+        mode = "ab" if offset else "wb"
+        print(
+            f"fetch {remote} → {dest} (resume={offset}, attempt={attempt}/{retries})",
+            flush=True,
+        )
         try:
-            ftp.retrbinary(f"RETR {remote}", _write, blocksize=1 << 20)
+            with dest.open(mode) as out:
+
+                def _write(block: bytes) -> None:
+                    out.write(block)
+
+                if offset:
+                    ftp.sendcmd(f"REST {offset}")
+                ftp.retrbinary(f"RETR {remote}", _write, blocksize=1 << 20)
+            if remote_size is not None:
+                got = dest.stat().st_size
+                if got != remote_size:
+                    raise RuntimeError(
+                        f"size mismatch {dest.name}: got {got}, expected {remote_size}"
+                    )
+            return ftp
         except error_perm as e:
             if offset:
-                # REST not supported — restart
                 print(f"REST failed ({e}); restarting {dest.name}", flush=True)
-                out.close()
                 dest.unlink(missing_ok=True)
-                download_file(ftp, remote, dest)
-                return
+                last_exc = e
+                continue
             raise
-    if remote_size is not None:
-        got = dest.stat().st_size
-        if got != remote_size:
-            raise RuntimeError(f"size mismatch {dest.name}: got {got}, expected {remote_size}")
+        except (TimeoutError, OSError, EOFError, RuntimeError) as e:
+            last_exc = e
+            print(
+                f"transfer interrupted ({type(e).__name__}: {e}); reconnecting…",
+                flush=True,
+            )
+            try:
+                ftp.quit()
+            except Exception:
+                pass
+            ftp = _connect()
+            # refresh size after reconnect
+            remote_size = _ftp_size(ftp, remote) or remote_size
+    assert last_exc is not None
+    raise last_exc
 
 
 def fetch_stage1(*, out_root: Path = OUT_ROOT) -> dict[str, str]:
     out_root.mkdir(parents=True, exist_ok=True)
-    ftp = FTP(FTP_HOST, timeout=120)
-    ftp.login()
-    ftp.set_pasv(True)
+    ftp = _connect()
 
     # meta first
     for name in META_FILES:
-        download_file(ftp, f"{FTP_ROOT}/{name}", out_root / name)
+        ftp = download_file(ftp, f"{FTP_ROOT}/{name}", out_root / name)
 
     md5_map = _parse_md5((out_root / "md5.txt").read_text(encoding="utf-8", errors="replace"))
     dataset_dir = out_root / "dataset"
@@ -121,7 +152,7 @@ def fetch_stage1(*, out_root: Path = OUT_ROOT) -> dict[str, str]:
     results: dict[str, str] = {}
     for name in STAGE1_ARCHIVES:
         dest = dataset_dir / name
-        download_file(ftp, f"{FTP_ROOT}/dataset/{name}", dest)
+        ftp = download_file(ftp, f"{FTP_ROOT}/dataset/{name}", dest)
         expected = md5_map.get(name)
         if expected:
             digest = _md5_file(dest)
@@ -133,7 +164,10 @@ def fetch_stage1(*, out_root: Path = OUT_ROOT) -> dict[str, str]:
             results[name] = _md5_file(dest)
             print(f"md5 (no catalog entry): {name} = {results[name]}", flush=True)
 
-    ftp.quit()
+    try:
+        ftp.quit()
+    except Exception:
+        pass
     summary = out_root / "fetch_stage1.json"
     import json
 
