@@ -43,7 +43,7 @@ Default OCR backend: **PaddleOCR-VL-1.6**. Face: **OpenCV Zoo YuNet + SFace**.
 ## Quick start
 
 ```bash
-git clone https://github.com/<org>/redrob-verify.git
+git clone https://github.com/savagemanage/redrob-verify.git
 cd redrob-verify
 chmod +x run.sh tools/bootstrap_gpu.sh tools/fetch_models.sh
 
