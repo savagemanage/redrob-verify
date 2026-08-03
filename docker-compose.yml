@@ -56,6 +56,11 @@ services:
     build:
       context: .
       dockerfile: services/forgery/Dockerfile
+      args:
+        # Blackwell sm_120 needs cu128+ PyTorch (2.7.1). Older GPUs can override.
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128
+        TORCH_PACKAGE: torch==2.7.1
+        TORCHVISION_PACKAGE: torchvision==0.22.1
     ports:
       - "8003:8003"
     gpus: all
@@ -64,6 +69,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./models:/app/models:ro
       - ./services/forgery:/app/services/forgery:ro
+      - ./services/common:/app/services/common:ro
 
   identity:
     build:

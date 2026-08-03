@@ -29,7 +29,26 @@ def _load_config() -> dict[str, Any]:
 
 CFG = _load_config()
 FORGERY_CFG = dict(CFG.get("forgery") or {})
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _select_device() -> torch.device:
+    """Prefer CUDA only when a kernel can actually run (Blackwell needs cu128+)."""
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+    try:
+        # zeros() can succeed while conv kernels are missing for sm_120.
+        x = torch.randn(1, 3, 8, 8, device="cuda")
+        w = torch.randn(4, 3, 3, 3, device="cuda")
+        y = torch.nn.functional.conv2d(x, w, padding=1)
+        torch.cuda.synchronize()
+        del x, w, y
+        return torch.device("cuda")
+    except RuntimeError as error:
+        print(f"forgery: CUDA unusable ({error}); falling back to CPU", flush=True)
+        return torch.device("cpu")
+
+
+DEVICE = _select_device()
 torch.manual_seed(int(CFG.get("seed", 42)))
 MODEL = ForgeryNet().to(DEVICE).eval()
 WEIGHTS_PATH = REPO_ROOT / str(FORGERY_CFG.get("weights_path", "models/forgery/best.pth"))

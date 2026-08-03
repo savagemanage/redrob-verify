@@ -1,17 +1,35 @@
-# Forgery: PyTorch CUDA runtime (not python:3.11-slim — that has no NVIDIA libs).
-# pip torch wheels still need the host to pass a GPU via compose `gpus: all`.
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+# Forgery: PyTorch with Blackwell (sm_120) support via CUDA 12.8 wheels.
+# Host must pass a GPU via compose `gpus: all`.
+#
+# Override at build time if needed:
+#   docker compose build --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu128
+ARG CUDA_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+FROM ${CUDA_IMAGE}
+
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cu128
+ARG TORCH_PACKAGE=torch==2.7.1
+ARG TORCHVISION_PACKAGE=torchvision==0.22.1
 
 WORKDIR /app
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    python3 \
+    python3-pip \
+    python3-venv \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/bin/python
 
-# Base image already has torch/torchvision; install API deps only.
-COPY services/forgery/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -U pip \
-    && pip install --no-cache-dir \
+# Isolate from distro site-packages; install torch first from the CUDA index.
+RUN python -m pip install --no-cache-dir -U pip \
+    && python -m pip install --no-cache-dir \
+        --index-url "${TORCH_INDEX}" \
+        "${TORCH_PACKAGE}" \
+        "${TORCHVISION_PACKAGE}" \
+    && python -m pip install --no-cache-dir \
         "fastapi>=0.115.0" \
         "uvicorn[standard]>=0.30.0" \
         "python-multipart>=0.0.9" \
