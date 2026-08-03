@@ -8,9 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/ocr/requirements.txt /tmp/requirements.txt
-# Prefer GPU paddle when the host passes --gpus; CPU image remains usable without it.
-ARG PADDLE_INDEX=https://www.paddlepaddle.org.cn/packages/stable/cu126/
-ARG PADDLE_PACKAGE=paddlepaddle-gpu==3.2.1
+# Prefer GPU paddle when the host passes --gpus.
+# Blackwell (sm_120 / RTX 50 / RTX PRO 6000) needs cu129+ wheels — not cu126/3.2.1.
+ARG PADDLE_INDEX=https://www.paddlepaddle.org.cn/packages/stable/cu129/
+ARG PADDLE_PACKAGE=paddlepaddle-gpu==3.3.0
 RUN pip install --no-cache-dir -U pip \
     && pip install --no-cache-dir ${PADDLE_PACKAGE} -i ${PADDLE_INDEX} \
     && pip install --no-cache-dir -r /tmp/requirements.txt

@@ -40,6 +40,12 @@ Default OCR backend: **PaddleOCR-VL-1.6**. Face: **OpenCV Zoo YuNet + SFace**.
 - Docker with NVIDIA Container Toolkit (for GPU OCR / forgery)
 - Optional: Java 11+ and [Apache JMeter](https://jmeter.apache.org/) 5.6+ (identity latency eval)
 
+**GPU note:** OCR defaults to `paddlepaddle-gpu==3.3.0` from the **cu129** index
+(Blackwell / sm_120, e.g. RTX 50-series and RTX PRO 6000). Older cards can rebuild
+with compose build-args `PADDLE_INDEX=.../cu126/` and `PADDLE_PACKAGE=paddlepaddle-gpu==3.2.1`.
+If `/v1/meta` shows `backend=stub`, check `stub_reason` and OCR container logs for
+`Mismatched GPU Architecture`.
+
 ## Quick start
 
 ```bash

@@ -24,8 +24,9 @@ services:
       context: .
       dockerfile: services/ocr/Dockerfile
       args:
-        PADDLE_INDEX: https://www.paddlepaddle.org.cn/packages/stable/cu126/
-        PADDLE_PACKAGE: paddlepaddle-gpu==3.2.1
+        # Blackwell sm_120 (RTX 50 / RTX PRO 6000): use cu129. Older GPUs: cu126 + 3.2.1.
+        PADDLE_INDEX: https://www.paddlepaddle.org.cn/packages/stable/cu129/
+        PADDLE_PACKAGE: paddlepaddle-gpu==3.3.0
     ports:
       - "8001:8001"
     gpus: all
