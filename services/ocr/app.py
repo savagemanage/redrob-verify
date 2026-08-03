@@ -74,6 +74,7 @@ async def meta() -> dict[str, Any]:
             "lang": getattr(PIPELINE, "lang", None),
             "backend_lang": getattr(backend, "lang", None),
             "pipeline_version": getattr(backend, "model_version", None),
+            "stub_reason": getattr(backend, "reason", None),
         },
     )
 

@@ -37,12 +37,21 @@ def main() -> None:
     backend = str(meta.get("backend") or "")
     service = str(meta.get("service") or "")
     print(f"meta service={service!r} backend={backend!r} model_version={meta.get('model_version')!r}")
+    if meta.get("stub_reason"):
+        print(f"stub_reason={meta.get('stub_reason')!r}")
     if service != "ocr":
         print(f"ERROR: expected service=ocr, got {service!r}", file=sys.stderr)
         sys.exit(1)
     if backend not in {"paddleocr_vl", "paddleocr_classic"}:
         print(
             f"ERROR: refusing non-Paddle backend {backend!r} (legacy mock risk)",
+            file=sys.stderr,
+        )
+        if meta.get("stub_reason"):
+            print(f"HINT: {meta.get('stub_reason')}", file=sys.stderr)
+        print(
+            "HINT: docker logs redrob-verify-ocr-1 ; "
+            "docker exec redrob-verify-ocr-1 python -c 'import paddle; print(paddle.device.get_device())'",
             file=sys.stderr,
         )
         sys.exit(1)

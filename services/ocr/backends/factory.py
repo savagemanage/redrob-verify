@@ -46,7 +46,9 @@ def create_backend(ocr_cfg: dict[str, Any], *, repo_root: Path | None = None) ->
             return PaddleOcrVlBackend(model_dir=path)
         raise ValueError(f"unknown ocr backend '{name}'. Supported: paddleocr_classic, paddleocr_vl")
     except (ImportError, OSError, RuntimeError, ValueError) as error:
-        return StubOcrBackend(f"{name}_unavailable: {type(error).__name__}: {error}")
+        reason = f"{name}_unavailable: {type(error).__name__}: {error}"
+        print(f"OCR backend fallback to stub: {reason}", flush=True)
+        return StubOcrBackend(reason)
 
 
 __all__ = [
