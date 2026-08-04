@@ -1,4 +1,4 @@
-"""ForgeryNet backend (ResNet-50 + FFT + HOG @ 224²)."""
+"""ForgeryNet backend (ResNet-50 + FFT + HOG + loc head)."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ from services.forgery.model import ForgeryNet
 class ForgeryNetDetector:
     name = "forgery_net"
 
-    def __init__(self, weights_path: Path, device: torch.device, image_size: int = 224):
+    def __init__(self, weights_path: Path, device: torch.device, image_size: int = 320):
         self.weights_path = weights_path
         self.device = device
         self.image_size = image_size
-        self.model = ForgeryNet().to(device).eval()
+        self.model = ForgeryNet(imagenet=False, loc_head=True).to(device).eval()
         self.status = "untrained"
         if weights_path.is_file():
             checkpoint = torch.load(weights_path, map_location=device, weights_only=True)

@@ -65,7 +65,7 @@ services:
       - "8003:8003"
     gpus: all
     environment:
-      FORGERY_BACKEND: ${FORGERY_BACKEND:-trufor}
+      FORGERY_BACKEND: ${FORGERY_BACKEND:-forgery_net}
       TRUFOR_SRC: /trufor_src
     volumes:
       - ./data:/app/data:ro

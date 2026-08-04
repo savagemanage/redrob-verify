@@ -57,6 +57,35 @@ class TensorHOG(nn.Module):
         return F.normalize(pooled.flatten(1), dim=1)
 
 
+class LocHead(nn.Module):
+    """Light upsample decoder: ResNet /32 map → ~image/4 for denser mask supervision."""
+
+    def __init__(self, in_channels: int = 2048) -> None:
+        super().__init__()
+        self.block1 = nn.Sequential(
+            nn.Conv2d(in_channels, 512, 3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.block2 = nn.Sequential(
+            nn.Conv2d(512, 256, 3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.block3 = nn.Sequential(
+            nn.Conv2d(256, 64, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 1, 1),
+        )
+
+    def forward(self, spatial: Tensor) -> Tensor:
+        x = self.block1(spatial)
+        x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
+        x = self.block2(x)
+        x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
+        x = self.block3(x)
+        x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
+        return x
+
+
 class ForgeryNet(nn.Module):
     """ResNet-50 image branch + FFT/HOG auxiliaries + optional localization head."""
 
@@ -83,15 +112,7 @@ class ForgeryNet(nn.Module):
         self.hog_branch = nn.Sequential(nn.Linear(9 * 7 * 7, 128), nn.ReLU(inplace=True))
         self.attention = ChannelAttention(2048 + 128 + 128)
         self.classifier = nn.Linear(2048 + 128 + 128, 1)
-        self.loc_head: nn.Module | None
-        if loc_head:
-            self.loc_head = nn.Sequential(
-                nn.Conv2d(2048, 256, 3, padding=1),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(256, 1, 1),
-            )
-        else:
-            self.loc_head = None
+        self.loc_head: nn.Module | None = LocHead(2048) if loc_head else None
 
     def fft_magnitude(self, image: Tensor) -> Tensor:
         """Return normalized log-magnitude spectra without CPU/Python image loops."""

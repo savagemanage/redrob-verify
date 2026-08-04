@@ -95,7 +95,18 @@ def collect_freeze(
     else:
         model_sha = "none"  # P0: no model weights yet
 
-    dataset_sha = sha256_tree(data_root) if data_root.is_dir() else "none"
+    dataset_parts: list[str] = []
+    if data_root.is_dir():
+        # Hash eval datasets only — skip train scratch (2_forgery_gen*) and caches.
+        for name in ("1_ocr", "2_forgery", "3_face", "4_resume"):
+            part = data_root / name
+            if part.is_dir():
+                dataset_parts.append(f"{name}:{sha256_tree(part)}")
+    dataset_sha = (
+        hashlib.sha256("\n".join(dataset_parts).encode("utf-8")).hexdigest()
+        if dataset_parts
+        else "none"
+    )
 
     return {
         "model_sha256": model_sha,

@@ -128,10 +128,9 @@ Third-party models and datasets (PaddleOCR-VL, OpenCV Zoo, MIDV-2020, TruFor, â€
 have their own terms; inventory and constraints are in `LICENSES.md`. Weights and
 raw images are downloaded locally and must not be committed.
 
-**Forgery note:** the default research backend may be TruFor (nonprofit-only
-upstream). Enabling it does not make those weights Apache-2.0. Prefer
-`forgery.backend: forgery_net` when you need an Apache-compatible stack, or treat
-TruFor results as research-only.
+**Forgery note:** default backend is **ForgeryNet** (Apache-oriented, in-repo +
+torchvision ImageNet init). Optional **TruFor** (`FORGERY_BACKEND=trufor`) is
+research-only (GRIP-UNINA nonprofit terms) â€” do not publish those weights.
 
 ## Contributing
 

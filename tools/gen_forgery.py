@@ -31,6 +31,8 @@ class Profile:
 PROFILES = {
     # Cover test-profile patch/opacity range; keep a distinct seed from "test".
     "train": Profile(seed=17_101, patch_fraction=(0.05, 0.26), opacity=(0.40, 0.90)),
+    "train_v2": Profile(seed=17_202, patch_fraction=(0.04, 0.28), opacity=(0.35, 0.92)),
+    "train_v3": Profile(seed=17_303, patch_fraction=(0.06, 0.24), opacity=(0.38, 0.88)),
     "test": Profile(seed=91_337, patch_fraction=(0.10, 0.26), opacity=(0.42, 0.74)),
 }
 DIFFICULTY = {
@@ -165,11 +167,17 @@ def generate(
     if count is not None:
         sources = sources[:count]
 
-    root = (output_root or DEFAULT_OUTPUT) / profile_name
+    # Folder per profile×difficulty so train pools can be concatenated without clobbering.
+    # Legacy paths: train/medium → train, test/medium → test.
+    if difficulty == "medium" and profile_name in {"train", "test"}:
+        folder = profile_name
+    else:
+        folder = f"{profile_name}_{difficulty}"
+    root = (output_root or DEFAULT_OUTPUT) / folder
     image_dir, mask_dir = root / "images", root / "masks"
     image_dir.mkdir(parents=True, exist_ok=True)
     mask_dir.mkdir(parents=True, exist_ok=True)
-    rng = random.Random(profile.seed)
+    rng = random.Random(profile.seed + (hash(difficulty) % 10_000))
     alpha_min, alpha_max = DIFFICULTY[difficulty]
     records: list[dict] = []
     for index, source in enumerate(sources, start=1):
@@ -182,7 +190,7 @@ def generate(
         fraction = rng.uniform(*profile.patch_fraction)
         alpha = rng.uniform(*profile.opacity) * rng.uniform(alpha_min, alpha_max)
         forged, mask = _tamper(tamper, image, donor, rng, fraction, alpha)
-        sample_id = f"fg_{profile_name}_{index:04d}"
+        sample_id = f"fg_{folder}_{index:04d}"
         forged_path, mask_path = image_dir / f"{sample_id}.png", mask_dir / f"{sample_id}_mask.png"
         cv2.imwrite(str(forged_path), forged)
         cv2.imwrite(str(mask_path), mask)
@@ -251,7 +259,14 @@ def main() -> None:
             args.input_dir,
             eval_root=REPO_ROOT / "data" / "2_forgery",
         )
-    print(f"Generated {len(records)} {args.profile} forgeries under {args.output_root / args.profile}")
+    print(f"Generated {len(records)} {args.profile}/{args.difficulty} forgeries under {records and args.output_root}")
+    if records:
+        # Recompute folder the same way generate() does for the log line.
+        if args.difficulty == "medium" and args.profile in {"train", "test"}:
+            folder = args.profile
+        else:
+            folder = f"{args.profile}_{args.difficulty}"
+        print(f"  -> {args.output_root / folder}")
 
 
 if __name__ == "__main__":

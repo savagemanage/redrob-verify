@@ -103,7 +103,7 @@ class ForgeryRecord(BaseModel):
     source: str | None = None
     tamper: str | None = None
     mask_path: str | None = None
-    profile: Literal["train", "test"] | None = None
+    profile: str | None = None  # gen_forgery profile name (train, train_v2, test, …)
     # TC2/TC3 split: in_domain = our gen_forgery; cross_domain = FMIDV (3rd party)
     eval_domain: Literal["in_domain", "cross_domain"] | None = None
     generator: str | None = None  # e.g. gen_forgery | fmidv | midv_authentic

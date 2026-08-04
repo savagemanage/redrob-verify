@@ -42,18 +42,28 @@ class Sample:
     path: Path
     label: int
     mask_path: Path | None = None
+    # If set, decode via in-memory JPEG recompress so train auth ≠ eval pixels.
+    jpeg_quality: int | None = None
 
 
-def _cache_key(path: Path, image_size: int) -> str:
+def _cache_key(path: Path, image_size: int, jpeg_quality: int | None = None) -> str:
     stat = path.stat()
-    payload = f"{path.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{image_size}"
+    payload = f"{path.resolve()}|{stat.st_mtime_ns}|{stat.st_size}|{image_size}|jq={jpeg_quality}"
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _load_resized_rgb(path: Path, image_size: int) -> Tensor:
+def _load_resized_rgb(path: Path, image_size: int, jpeg_quality: int | None = None) -> Tensor:
     with Image.open(path) as image:
+        rgb = image.convert("RGB")
+        if jpeg_quality is not None:
+            import io
+
+            buf = io.BytesIO()
+            rgb.save(buf, format="JPEG", quality=int(jpeg_quality))
+            buf.seek(0)
+            rgb = Image.open(buf).convert("RGB")
         pixels = np.asarray(
-            image.convert("RGB").resize((image_size, image_size), Image.Resampling.BILINEAR),
+            rgb.resize((image_size, image_size), Image.Resampling.BILINEAR),
             dtype=np.float32,
         ) / 255.0
     return torch.from_numpy(pixels).permute(2, 0, 1).contiguous()
@@ -70,15 +80,26 @@ def _load_resized_mask(path: Path | None, image_size: int) -> Tensor:
     return torch.from_numpy((arr > 127).astype(np.float32))[None]
 
 
-def _cached_tensor(path: Path, image_size: int, cache_dir: Path) -> Tensor:
-    """Load 224² CHW float32 from disk cache, building it on first access."""
+def _cached_tensor(
+    path: Path, image_size: int, cache_dir: Path, jpeg_quality: int | None = None
+) -> Tensor:
+    """Load resized CHW float32 from disk cache, building it on first access."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{_cache_key(path, image_size)}.pt"
+    cache_path = cache_dir / f"{_cache_key(path, image_size, jpeg_quality)}.pt"
     if cache_path.is_file():
         return torch.load(cache_path, map_location="cpu", weights_only=True)
-    tensor = _load_resized_rgb(path, image_size)
+    tensor = _load_resized_rgb(path, image_size, jpeg_quality=jpeg_quality)
     torch.save(tensor, cache_path)
     return tensor
+
+
+def _dice_loss(logits: Tensor, targets: Tensor, eps: float = 1.0) -> Tensor:
+    probs = torch.sigmoid(logits.float())
+    dims = tuple(range(1, probs.ndim))
+    inter = (probs * targets).sum(dim=dims)
+    union = probs.sum(dim=dims) + targets.sum(dim=dims)
+    dice = (2.0 * inter + eps) / (union + eps)
+    return 1.0 - dice.mean()
 
 
 def _materialize(
@@ -98,10 +119,12 @@ def _materialize(
     t0 = time.perf_counter()
     hits = 0
     for index, sample in enumerate(samples, start=1):
-        cache_path = cache_dir / f"{_cache_key(sample.path, image_size)}.pt"
+        cache_path = cache_dir / f"{_cache_key(sample.path, image_size, sample.jpeg_quality)}.pt"
         if cache_path.is_file():
             hits += 1
-        images.append(_cached_tensor(sample.path, image_size, cache_dir))
+        images.append(
+            _cached_tensor(sample.path, image_size, cache_dir, jpeg_quality=sample.jpeg_quality)
+        )
         if with_masks:
             masks.append(_load_resized_mask(sample.mask_path, image_size))
         labels.append(sample.label)
@@ -194,56 +217,61 @@ def _roc_gate(scores: list[float], labels: list[int]) -> dict[str, float | bool 
     return best
 
 
-def _samples_train(data_root: Path, train_forged_root: Path) -> list[Sample]:
-    """Authentic = MIDV scan under 2_forgery/authentic; forged = gen_forgery --profile train.
+def _samples_train(
+    data_root: Path,
+    train_forged_roots: list[Path],
+    *,
+    auth_jpeg_quality: int = 72,
+) -> list[Sample]:
+    """Authentic = JPEG-recompressed MIDV scans; forged = gen_forgery train pools.
 
-    Hold out eval authentic paths from the train negatives so train/val images
-    are disjoint (identical-file leakage was 500/500 and masks real gen gap).
+    Eval authentic stay pristine originals. Train uses JPEG recompress so negatives
+    are not pixel-identical to the eval set (full authentic pool overlaps eval).
     """
     authentic_dir = data_root / "2_forgery" / "authentic"
     authentic = [
-        Sample(path, 0, None)
+        Sample(path, 0, None, jpeg_quality=auth_jpeg_quality)
         for path in sorted(authentic_dir.glob("*"))
         if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
     ]
-    eval_auth = {
-        (data_root / "2_forgery" / record.path).resolve()
-        for record in load_forgery_manifest(data_root / "2_forgery")
-        if record.label == 0
-    }
-    # Keep a train-only authentic pool: drop paths that appear in the eval manifest.
-    # If that would empty the set (legacy identical layout), fall back to a seeded
-    # 50/50 split of authentic so negatives are still present in train.
-    held_out = [s for s in authentic if s.path.resolve() not in eval_auth]
-    if held_out:
-        authentic = held_out
-    elif len(authentic) >= 2:
-        rng = random.Random(17_101)  # train-profile seed family; not the test seed
-        order = authentic[:]
-        rng.shuffle(order)
-        authentic = order[: len(order) // 2]
-        print(
-            f"WARNING: all authentic paths overlap eval; using seeded half n={len(authentic)} for train",
-            flush=True,
+    forged: list[Sample] = []
+    for train_forged_root in train_forged_roots:
+        forged_records = load_forgery_manifest(train_forged_root)
+        forged.extend(
+            Sample(
+                train_forged_root / record.path,
+                1,
+                (train_forged_root / record.mask_path) if record.mask_path else None,
+            )
+            for record in forged_records
+            if record.label == 1
         )
-    forged_records = load_forgery_manifest(train_forged_root)
-    forged = [
-        Sample(
-            train_forged_root / record.path,
-            1,
-            (train_forged_root / record.mask_path) if record.mask_path else None,
-        )
-        for record in forged_records
-        if record.label == 1
-    ]
     if not authentic:
         raise RuntimeError(f"no authentic images in {authentic_dir}")
     if not forged:
+        roots = ", ".join(str(r) for r in train_forged_roots)
         raise RuntimeError(
-            f"no train forgeries in {train_forged_root}; run: "
+            f"no train forgeries in [{roots}]; run: "
             "uv run python -m tools.gen_forgery --profile train --output-root data/2_forgery_gen"
         )
+    print(
+        f"train authentic={len(authentic)} (jpeg_q={auth_jpeg_quality}) forged={len(forged)} "
+        f"roots={len(train_forged_roots)}",
+        flush=True,
+    )
     return authentic + forged
+
+
+def _resolve_train_forged_roots(data_root: Path, explicit: list[Path] | None) -> list[Path]:
+    if explicit:
+        return explicit
+    pool = data_root / "2_forgery_gen"
+    if not pool.is_dir():
+        return [data_root / "2_forgery_gen" / "train"]
+    roots = sorted(
+        p for p in pool.iterdir() if p.is_dir() and (p / "manifest.jsonl").is_file() and p.name != "test"
+    )
+    return roots or [pool / "train"]
 
 
 def _samples_eval(data_root: Path) -> list[Sample]:
@@ -402,8 +430,16 @@ def train(args: argparse.Namespace) -> dict:
         torch.use_deterministic_algorithms(False)
 
     data_root = resolve_data_root(cfg)
-    train_forged_root = Path(args.train_forged_root) if args.train_forged_root else data_root / "2_forgery_gen" / "train"
-    train_samples = _samples_train(data_root, train_forged_root)
+    explicit_roots: list[Path] | None = None
+    if getattr(args, "train_forged_roots", None):
+        explicit_roots = [Path(p) for p in args.train_forged_roots]
+    elif args.train_forged_root:
+        explicit_roots = [Path(args.train_forged_root)]
+    train_forged_roots = _resolve_train_forged_roots(data_root, explicit_roots)
+    auth_jpeg_quality = int(getattr(args, "auth_jpeg_quality", 72))
+    train_samples = _samples_train(
+        data_root, train_forged_roots, auth_jpeg_quality=auth_jpeg_quality
+    )
     validation_samples = _samples_eval(data_root)
     if args.max_samples is not None and int(args.max_samples) > 0:
         rng = random.Random(seed)
@@ -501,11 +537,20 @@ def train(args: argparse.Namespace) -> dict:
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             if args.augment:
-                # Cheap geometry/noise only — keeps FFT/HOG meaningful.
+                # Geometry / photometric noise that keeps FFT/HOG meaningful.
                 if torch.rand(1, device=device).item() < 0.5:
                     images = torch.flip(images, dims=(-1,))
                     if masks is not None:
                         masks = torch.flip(masks, dims=(-1,))
+                if torch.rand(1, device=device).item() < 0.5:
+                    images = torch.flip(images, dims=(-2,))
+                    if masks is not None:
+                        masks = torch.flip(masks, dims=(-2,))
+                # Brightness / contrast jitter (broadcast over NCHW).
+                bright = 1.0 + 0.15 * (torch.rand(images.size(0), 1, 1, 1, device=device) * 2 - 1)
+                contrast = 1.0 + 0.15 * (torch.rand(images.size(0), 1, 1, 1, device=device) * 2 - 1)
+                mean = images.mean(dim=(-2, -1), keepdim=True)
+                images = (mean + (images - mean) * contrast) * bright
                 images = (images + 0.02 * torch.randn_like(images)).clamp(0.0, 1.0)
             optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", enabled=use_amp):
@@ -516,7 +561,9 @@ def train(args: argparse.Namespace) -> dict:
                         loc_logits = F.interpolate(
                             loc_logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
                         )
-                    loc_loss = loc_loss_fn(loc_logits, masks)
+                    loc_bce = loc_loss_fn(loc_logits, masks)
+                    loc_dice = _dice_loss(loc_logits, masks)
+                    loc_loss = 0.5 * loc_bce + 0.5 * loc_dice
                 else:
                     loc_loss = det_loss * 0.0
                 loss = det_loss + loc_weight * loc_loss
@@ -623,13 +670,21 @@ def main() -> None:
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--collapse-patience", type=int, default=2)
-    parser.add_argument("--loc-weight", type=float, default=1.0, help="mask BCE weight (0 disables loc head)")
+    parser.add_argument("--loc-weight", type=float, default=2.0, help="mask BCE+Dice weight (0 disables loc head)")
+    parser.add_argument("--auth-jpeg-quality", type=int, default=72, help="JPEG recompress quality for train authentic")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--train-forged-root",
         type=Path,
         default=None,
-        help="dir with train-profile gen_forgery manifest (default: data/2_forgery_gen/train)",
+        help="single train-profile gen_forgery dir (default: auto-discover data/2_forgery_gen/*)",
+    )
+    parser.add_argument(
+        "--train-forged-roots",
+        type=Path,
+        nargs="*",
+        default=None,
+        help="explicit list of forged train dirs (overrides auto-discover)",
     )
     parser.add_argument(
         "--cache-dir",
