@@ -13,69 +13,78 @@ tags:
 pipeline_tag: image-classification
 ---
 
-# RedRob Verify — ForgeryNet
+# redrob-verify — forgery
 
-Document forgery detector for **[redrob-verify](https://github.com/savagemanage/redrob-verify)** —
-the RedRob verification stack (OCR / forgery / face / identity).
+Forgery detector weights for **[redrob-verify](https://github.com/savagemanage/redrob-verify)**,
+the Redrob verification stack (document OCR, forgery, face match, identity).
 
-Hub model: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery)
+- Hub: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery)
+- Code: Apache-2.0 in the GitHub repo (`services/forgery/`)
 
 ## Intended use
 
-Score a document scan/photo for **tampering likelihood** in `[0, 1]` (higher = more likely forged).
-Built for ID / KYC style documents in the redrob-verify harness (MIDV authentic + synthetic patches).
+Score a document scan or photo for **tampering likelihood** in `[0, 1]`
+(higher = more likely forged). Tuned for ID / KYC–style pages in the
+redrob-verify harness (MIDV authentic + synthetic patches).
 
-**Not** a general deepfake face detector. **Not** a claim of cross-domain FMIDV pass unless you evaluate that split yourself.
+Not a face deepfake detector. Not a claim of FMIDV cross-domain pass unless you
+run that split yourself.
 
-## Architecture
+## Model
 
-- ResNet-50 encoder (ImageNet-1K V2 init via torchvision)
-- FFT magnitude + differentiable HOG auxiliary streams
-- Image-level classifier + upsample localization head (mask BCE + Dice at train time)
-- Default input size: **320×320** RGB
+| | |
+|--|--|
+| Architecture | ResNet-50 + FFT + HOG streams + upsample localization head |
+| Backbone init | torchvision `ResNet50_Weights.IMAGENET1K_V2` (BSD-3) |
+| Input | RGB **320×320** |
+| Serving score | Image-level sigmoid (localization used at train time) |
+| Code | `services/forgery/model.py` |
 
-Code: `services/forgery/model.py` in the repo (Apache-2.0).
+Files in this repo:
+
+- `model.safetensors` — weights for Hub / `safetensors` loaders
+- `forgerynet_apache.pth` — full training checkpoint (`model_state` + metadata); drop-in for redrob-verify `config.yaml`
+- `config.json` — image size, recommended threshold, provenance pointers
 
 ## Training data (provenance)
 
 | Source | Role | Terms |
 |--------|------|--------|
-| torchvision ResNet50 ImageNet-1K V2 | Backbone init | BSD-3 / torchvision |
+| torchvision ResNet-50 ImageNet-1K V2 | Backbone init | BSD-3 / torchvision |
 | MIDV-2020 authentic pages | Train negatives (JPEG-recompressed) + eval authentic | Follow MIDV / portal terms |
-| `tools/gen_forgery.py` synthetic tampers | Train positives + masks (copy-move / splice / inpaint / text_replace; multi-seed & difficulty) | Synthetic; generated in-repo |
+| `tools/gen_forgery.py` synthetic tampers | Train positives + masks | Synthetic; generated in-repo |
 
 Weights are **not** derived from TruFor.
 
-## Evaluation (in-domain harness)
+## Evaluation (in-domain)
 
-On redrob-verify `data/2_forgery` (n=1000, 500 auth / 500 gen_forgery test-profile):
+On redrob-verify `data/2_forgery` (n=1000):
 
-- Joint TC2/TC3 feasible interval ≈ **[0.13, 0.89]**
+- Joint TC2/TC3 feasible ≈ **[0.13, 0.89]**
 - Recommended threshold **0.45** → TPR ≈ **0.92**, F1 ≈ **0.82**
-- Metrics and protocol: `./run.sh eval-forgery` (see repo `config.yaml` targets)
 
-Cross-domain FMIDV is optional and off by default (`forgery.require_cross_domain: false`).
+Protocol: `./run.sh eval-forgery` in the GitHub repo.
 
-## How to use
+## Download & run
 
 ```bash
-# Train (GPU)
-./run.sh train-forgery --epochs 50 --image-size 320 --loc-weight 2.0 --gpu-resident \
-  --output models/forgery/forgerynet_apache.pth
+# From the redrob-verify checkout
+./tools/fetch_models.sh   # pulls face + forgery from Hugging Face
 
-# Serve
-# config.yaml: forgery.backend=forgery_net, weights_path=models/forgery/forgerynet_apache.pth, image_size=320
-# or: FORGERY_BACKEND=forgery_net
+# Or Hub only
+huggingface-cli download savagemanage/redrob-verify-forgery \
+  --local-dir models/forgery
 ```
 
-Checkpoint dict keys: `model_state`, plus train metadata (`epoch`, `auc`, `joint_interval_width`, …).
+Serve with `forgery.backend: forgery_net`, `image_size: 320`, and
+`weights_path: models/forgery/forgerynet_apache.pth` (or load `model.safetensors`
+via the same `ForgeryNet` class).
 
 ## Limitations
 
-- Tuned to MIDV + our synthetic generator; other scanners / tampers may need fine-tuning.
-- Localization head helps training; serving score is the **image-level** sigmoid.
-- Do not confuse with the optional TruFor research backend (nonprofit-only upstream).
+- Domain: MIDV + our synthetic generator; other scanners/tampers may need fine-tuning.
+- Optional TruFor backend in the code repo is research-only (nonprofit upstream) and is **not** these weights.
 
 ## Citation
 
-If you use this checkpoint, cite redrob-verify and the MIDV-2020 dataset per their terms.
+Cite redrob-verify and MIDV-2020 per their terms when reporting results.

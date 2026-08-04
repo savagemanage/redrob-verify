@@ -33,6 +33,16 @@ A host-side harness runs reproducible metrics and writes JSON (+ optional HTML r
 ```
 
 Default OCR backend: **PaddleOCR classic** (VL available via `ocr.backend`). Face: **OpenCV Zoo YuNet + SFace**.
+Forgery: **ForgeryNet** (Apache-oriented).
+
+Public weights on Hugging Face (fetched by `./tools/fetch_models.sh`):
+
+| Hub repo | Contents |
+|----------|----------|
+| [`savagemanage/redrob-verify-face`](https://huggingface.co/savagemanage/redrob-verify-face) | YuNet + SFace ONNX |
+| [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery) | ForgeryNet checkpoint |
+
+OCR VL / Paddle artifacts still come from their upstream Hub channels when that backend is enabled.
 
 ## Requirements
 
@@ -129,8 +139,9 @@ have their own terms; inventory and constraints are in `LICENSES.md`. Weights an
 raw images are downloaded locally and must not be committed.
 
 **Forgery note:** default backend is **ForgeryNet** (Apache-oriented, in-repo +
-torchvision ImageNet init). Optional **TruFor** (`FORGERY_BACKEND=trufor`) is
-research-only (GRIP-UNINA nonprofit terms) — do not publish those weights.
+torchvision ImageNet init). Weights: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery).
+Optional **TruFor** (`FORGERY_BACKEND=trufor`) is research-only (GRIP-UNINA nonprofit
+terms) — do not publish those weights.
 
 ## Contributing
 

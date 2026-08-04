@@ -70,6 +70,8 @@ def main() -> None:
     # HF prefers contiguous CPU tensors
     state = {k: v.detach().cpu().contiguous() for k, v in state.items()}
     save_file(state, staging / "model.safetensors")
+    # Also ship the native training checkpoint for drop-in config.yaml paths.
+    shutil.copy2(weights, staging / "forgerynet_apache.pth")
 
     config = {
         "architectures": ["ForgeryNet"],

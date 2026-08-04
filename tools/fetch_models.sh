@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
-# Download OpenCV Zoo YuNet + SFace ONNX weights (Apache-2.0). Do not commit the files.
+# Fetch redrob-verify runtime weights from Hugging Face (public).
+# Face: YuNet + SFace ONNX (OpenCV Zoo, Apache-2.0) via savagemanage/redrob-verify-face
+# Forgery: ForgeryNet checkpoint via savagemanage/redrob-verify-forgery
+#
+# Fallback: OpenCV Zoo GitHub raw URLs for face only if Hub is unreachable.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="$ROOT/models/face"
-mkdir -p "$OUT"
+FACE_OUT="$ROOT/models/face"
+FORGERY_OUT="$ROOT/models/forgery"
+mkdir -p "$FACE_OUT" "$FORGERY_OUT"
 
-YUNET_URL="https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-SFACE_URL="https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
-YUNET="$OUT/face_detection_yunet_2023mar.onnx"
-SFACE="$OUT/face_recognition_sface_2021dec.onnx"
+HF_FACE_REPO="${HF_FACE_REPO:-savagemanage/redrob-verify-face}"
+HF_FORGERY_REPO="${HF_FORGERY_REPO:-savagemanage/redrob-verify-forgery}"
+
+YUNET_NAME="face_detection_yunet_2023mar.onnx"
+SFACE_NAME="face_recognition_sface_2021dec.onnx"
+FORGERY_PTH="forgerynet_apache.pth"
+FORGERY_ST="model.safetensors"
+
+YUNET_ZOO="https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+SFACE_ZOO="https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
 
 resolve_python() {
   if [[ -x "$ROOT/.venv/bin/python" ]]; then
@@ -30,7 +41,7 @@ resolve_python() {
   return 1
 }
 
-download() {
+download_http() {
   local url="$1" dest="$2"
   if [[ -f "$dest" ]]; then
     echo "exists: $dest"
@@ -44,8 +55,42 @@ download() {
   fi
 }
 
-download "$YUNET_URL" "$YUNET"
-download "$SFACE_URL" "$SFACE"
+hf_download_file() {
+  local repo="$1" filename="$2" dest="$3"
+  if [[ -f "$dest" ]]; then
+    echo "exists: $dest"
+    return 0
+  fi
+  local url="https://huggingface.co/${repo}/resolve/main/${filename}"
+  echo "fetching HF ${repo}/${filename}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -L --fail --retry 3 -o "$dest" "$url"
+  else
+    wget -O "$dest" "$url"
+  fi
+}
+
+echo "==> face (${HF_FACE_REPO})"
+if ! hf_download_file "$HF_FACE_REPO" "$YUNET_NAME" "$FACE_OUT/$YUNET_NAME"; then
+  echo "HF face YuNet failed — falling back to OpenCV Zoo"
+  rm -f "$FACE_OUT/$YUNET_NAME"
+  download_http "$YUNET_ZOO" "$FACE_OUT/$YUNET_NAME"
+fi
+if ! hf_download_file "$HF_FACE_REPO" "$SFACE_NAME" "$FACE_OUT/$SFACE_NAME"; then
+  echo "HF face SFace failed — falling back to OpenCV Zoo"
+  rm -f "$FACE_OUT/$SFACE_NAME"
+  download_http "$SFACE_ZOO" "$FACE_OUT/$SFACE_NAME"
+fi
+
+echo "==> forgery (${HF_FORGERY_REPO})"
+hf_download_file "$HF_FORGERY_REPO" "$FORGERY_PTH" "$FORGERY_OUT/$FORGERY_PTH" || true
+hf_download_file "$HF_FORGERY_REPO" "$FORGERY_ST" "$FORGERY_OUT/$FORGERY_ST" || true
+hf_download_file "$HF_FORGERY_REPO" "config.json" "$FORGERY_OUT/config.json" || true
+
+if [[ ! -f "$FORGERY_OUT/$FORGERY_PTH" && ! -f "$FORGERY_OUT/$FORGERY_ST" ]]; then
+  echo "WARNING: forgery weights not downloaded. Train locally or check Hub access:" >&2
+  echo "  https://huggingface.co/${HF_FORGERY_REPO}" >&2
+fi
 
 sha256_file() {
   local f="$1"
@@ -64,16 +109,16 @@ sha256_file() {
   fi
 }
 
-YUNET_SHA="$(sha256_file "$YUNET")"
-SFACE_SHA="$(sha256_file "$SFACE")"
+YUNET_SHA="$(sha256_file "$FACE_OUT/$YUNET_NAME")"
+SFACE_SHA="$(sha256_file "$FACE_OUT/$SFACE_NAME")"
 echo "YuNet  SHA-256: $YUNET_SHA"
 echo "SFace  SHA-256: $SFACE_SHA"
+[[ -f "$FORGERY_OUT/$FORGERY_PTH" ]] && echo "Forgery PTH SHA-256: $(sha256_file "$FORGERY_OUT/$FORGERY_PTH")"
+[[ -f "$FORGERY_OUT/$FORGERY_ST" ]] && echo "Forgery ST  SHA-256: $(sha256_file "$FORGERY_OUT/$FORGERY_ST")"
 
 LIC="$ROOT/LICENSES.md"
 if [[ -f "$LIC" ]]; then
-  if ! PY="$(resolve_python)"; then
-    echo "warning: no python — skip LICENSES.md SHA update (models already downloaded)"
-  else
+  if PY="$(resolve_python)"; then
     # shellcheck disable=SC2086
     $PY - <<PY
 from pathlib import Path
@@ -103,4 +148,4 @@ PY
   fi
 fi
 
-echo "done → $OUT"
+echo "done → $FACE_OUT , $FORGERY_OUT"
