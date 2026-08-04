@@ -217,6 +217,16 @@ def _roc_gate(scores: list[float], labels: list[int]) -> dict[str, float | bool 
     return best
 
 
+def _holdout_train_names(data_root: Path) -> set[str] | None:
+    """If holdout_split.json exists, restrict train authentic to that document set."""
+    split_path = data_root / "2_forgery" / "holdout_split.json"
+    if not split_path.is_file():
+        return None
+    payload = json.loads(split_path.read_text(encoding="utf-8"))
+    names = payload.get("train_authentic") or []
+    return {str(n) for n in names} if names else None
+
+
 def _samples_train(
     data_root: Path,
     train_forged_roots: list[Path],
@@ -225,15 +235,26 @@ def _samples_train(
 ) -> list[Sample]:
     """Authentic = JPEG-recompressed MIDV scans; forged = gen_forgery train pools.
 
-    Eval authentic stay pristine originals. Train uses JPEG recompress so negatives
-    are not pixel-identical to the eval set (full authentic pool overlaps eval).
+    When ``data/2_forgery/holdout_split.json`` is present, only train-split
+    authentic documents are used (document-disjoint from eval). JPEG recompress
+    remains a domain cue so train negatives are not byte-identical to eval scans.
     """
     authentic_dir = data_root / "2_forgery" / "authentic"
+    allow = _holdout_train_names(data_root)
     authentic = [
         Sample(path, 0, None, jpeg_quality=auth_jpeg_quality)
         for path in sorted(authentic_dir.glob("*"))
-        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        if path.is_file()
+        and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        and (allow is None or path.name in allow)
     ]
+    if allow is not None:
+        missing = allow - {s.path.name for s in authentic}
+        if missing:
+            raise RuntimeError(
+                f"holdout train authentic missing {len(missing)} files "
+                f"(e.g. {next(iter(missing))})"
+            )
     forged: list[Sample] = []
     for train_forged_root in train_forged_roots:
         forged_records = load_forgery_manifest(train_forged_root)
@@ -255,7 +276,8 @@ def _samples_train(
             "uv run python -m tools.gen_forgery --profile train --output-root data/2_forgery_gen"
         )
     print(
-        f"train authentic={len(authentic)} (jpeg_q={auth_jpeg_quality}) forged={len(forged)} "
+        f"train authentic={len(authentic)} (jpeg_q={auth_jpeg_quality}"
+        f"{', holdout' if allow is not None else ''}) forged={len(forged)} "
         f"roots={len(train_forged_roots)}",
         flush=True,
     )

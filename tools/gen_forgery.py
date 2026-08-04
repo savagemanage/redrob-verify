@@ -206,24 +206,40 @@ def generate(
                 "profile": profile_name,
                 "eval_domain": "in_domain",
                 "generator": "gen_forgery",
+                # Authentic filename this forgery was built from (document holdout key).
+                "source": source.name,
             }
         )
     _write_jsonl(root / "manifest.jsonl", records)
     return records
 
 
-def refresh_eval_manifest(test_records: list[dict], authentic_dir: Path, *, eval_root: Path) -> None:
+def refresh_eval_manifest(
+    test_records: list[dict],
+    authentic_dir: Path,
+    *,
+    eval_root: Path,
+    authentic_names: list[str] | None = None,
+) -> None:
     """Merge authentic rows with test forgery rows for harness evaluation."""
-    authentic = sorted(path for path in authentic_dir.iterdir() if path.suffix.lower() in {".png", ".jpg", ".jpeg"})
+    if authentic_names is not None:
+        authentic = [authentic_dir / name for name in authentic_names]
+        missing = [str(p) for p in authentic if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(f"authentic missing: {missing[:5]}")
+    else:
+        authentic = sorted(
+            path for path in authentic_dir.iterdir() if path.suffix.lower() in {".png", ".jpg", ".jpeg"}
+        )
     records = [
         {
-            "id": f"auth_{i:04d}",
+            "id": path.stem,
             "path": f"authentic/{path.name}",
             "label": 0,
             "origin": "public_dataset",
             "fabrication": "authentic",
         }
-        for i, path in enumerate(authentic, start=1)
+        for path in authentic
     ]
     for record in test_records:
         records.append(dict(record))

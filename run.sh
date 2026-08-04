@@ -346,6 +346,10 @@ EOF
     need_uv
     "$UV" run python tools/build_ds2_splits.py "$@"
     ;;
+  split-forgery-holdout)
+    need_uv
+    "$UV" run python tools/split_forgery_holdout.py "$@"
+    ;;
   train-forgery)
     need_uv
     "$UV" run python -m services.forgery.train --config "$CONFIG" "$@"

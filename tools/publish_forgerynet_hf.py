@@ -38,6 +38,16 @@ def main() -> None:
     ap.add_argument("--private", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="build staging only, do not upload")
     ap.add_argument("--revision", default="main")
+    ap.add_argument(
+        "--recommended-threshold",
+        type=float,
+        default=None,
+        help="override config.json recommended_threshold (default: 0.45 or ckpt meta)",
+    )
+    ap.add_argument(
+        "--commit-message",
+        default="Update ForgeryNet holdout checkpoint (safetensors + model card)",
+    )
     args = ap.parse_args()
 
     try:
@@ -83,7 +93,18 @@ def main() -> None:
         "num_labels": 1,
         "id2label": {"0": "authentic", "1": "forged"},
         "label2id": {"authentic": 0, "forged": 1},
-        "recommended_threshold": 0.45,
+        "recommended_threshold": (
+            float(args.recommended_threshold)
+            if args.recommended_threshold is not None
+            else 0.87
+        ),
+        "holdout": {
+            "train_docs": 400,
+            "eval_docs": 100,
+            "eval_n": 200,
+            "seed": 7,
+            "protocol": "tools/split_forgery_holdout.py",
+        },
         "train_meta": {
             k: (float(v) if isinstance(v, (float,)) else v)
             for k, v in meta.items()
@@ -158,7 +179,7 @@ if __name__ == "__main__":
         repo_id=args.repo_id,
         repo_type="model",
         revision=args.revision,
-        commit_message="Add ForgeryNet Apache checkpoint (safetensors + model card)",
+        commit_message=args.commit_message,
     )
     print(f"uploaded https://huggingface.co/{args.repo_id}")
 
