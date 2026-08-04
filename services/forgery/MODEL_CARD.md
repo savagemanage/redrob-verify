@@ -51,19 +51,32 @@ Files in this repo:
 | Source | Role | Terms |
 |--------|------|--------|
 | torchvision ResNet-50 ImageNet-1K V2 | Backbone init | BSD-3 / torchvision |
-| MIDV-2020 authentic pages | Train negatives (JPEG-recompressed) + eval authentic | Follow MIDV / portal terms |
-| `tools/gen_forgery.py` synthetic tampers | Train positives + masks | Synthetic; generated in-repo |
+| MIDV-2020 authentic pages | Train negatives (JPEG-recompressed, **train-split only**) + eval authentic (**held-out docs**) | Follow MIDV / portal terms |
+| `tools/gen_forgery.py` synthetic tampers | Train positives + masks (from train docs only) | Synthetic; generated in-repo |
 
 Weights are **not** derived from TruFor.
 
 ## Evaluation (in-domain)
 
-On redrob-verify `data/2_forgery` (n=1000):
+Document-disjoint holdout (`tools/split_forgery_holdout.py`): **400** train /
+**100** eval authentic IDs, eval **n=200** (100 auth + 100 forged).
 
-- Joint TC2/TC3 feasible ≈ **[0.13, 0.89]**
-- Recommended threshold **0.45** → TPR ≈ **0.92**, F1 ≈ **0.82**
+Published checkpoint (seed **7**):
 
-Protocol: `./run.sh eval-forgery` in the GitHub repo.
+- Joint TC2/TC3 feasible ≈ **[0.69, 0.93]**
+- Recommended threshold **0.87** → TPR ≈ **0.92**, F1 ≈ **0.82**
+
+Multi-seed check (seeds 7 / 13 / 42; judge by **minimum**):
+
+| Seed | TPR | F1 | t* |
+|------|-----|----|----|
+| 7 | 0.92 | 0.821 | 0.87 |
+| 13 | 0.88 | 0.811 | 0.98 |
+| 42 | 0.93 | 0.798 | 0.96 |
+| **min** | **0.88** | **0.798** | — |
+
+Protocol: `./run.sh split-forgery-holdout --regenerate-train --rebuild-eval` then
+`./run.sh train-forgery` / `./run.sh eval-forgery`.
 
 ## Download & run
 

@@ -92,7 +92,7 @@ Images and archives are **not** in git (see `.gitignore`). Manifests and READMEs
 | Path | Role | How to obtain |
 |------|------|----------------|
 | `data/1_ocr` | OCR eval | MIDV-2020 via `./run.sh fetch-midv` + `ingest-midv` |
-| `data/2_forgery` | Forgery eval/train | MIDV authentic + `./run.sh gen-forgery` |
+| `data/2_forgery` | Forgery eval/train | MIDV authentic + `./run.sh gen-forgery` / **document-disjoint holdout** (`./run.sh split-forgery-holdout`) |
 | `data/3_face` | Face pairs | Built during MIDV ingest / pair tools |
 | `data/4_resume` | Identity latency | `./run.sh gen-resumes` |
 
@@ -112,6 +112,22 @@ Follow each dataset’s `license.txt`. Details: `LICENSES.md`, `data/README.md`.
 
 Targets and seeds live in `config.yaml`. For full OCR eval keep
 `ocr.eval_max_samples: null`.
+
+### Forgery holdout (recommended)
+
+ForgeryNet Hub weights are trained with a **document-disjoint** 400/100 split so
+eval authentic IDs never appear in train forgeries or JPEG negatives:
+
+```bash
+./run.sh split-forgery-holdout --seed 7 --train-n 400 --eval-n 100 \
+  --regenerate-train --rebuild-eval
+./run.sh train-forgery   # or docker GPU train — see services/forgery/
+./run.sh eval-forgery    # expects n=200 in config expected_counts
+```
+
+Multi-seed min (seeds 7/13/42): TPR ≥ **0.88**, F1 ≥ **0.798**. Published Hub
+threshold is **0.87** (seed 7). Details: `services/forgery/MODEL_CARD.md`,
+`data/2_forgery/README.md`.
 
 ## Configuration
 
