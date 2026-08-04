@@ -14,8 +14,9 @@ targets:
   tc5_accuracy_min: 0.8
   tc6_seconds_max: 60.0
 thresholds:
-  # Mid-band of ForgeryNet joint-feasible [0.13, 0.89] on in-domain n=1000.
-  forgery: 0.45
+  # Holdout ForgeryNet (seed 7 publish): document-disjoint 400/100, n=200 eval.
+  # Multi-seed min (7/13/42): TPR 0.88, F1 0.798 — see results/holdout_seed_sweep.md
+  forgery: 0.87
   # Face stays null until field_collected DS-3 (MIDV pairs cannot lock).
   face: null
 seed: 42
@@ -45,9 +46,10 @@ ocr:
 expected_counts:
   1_ocr: 3000
   2_forgery:
-    total: 1000
-    label_0: 500
-    label_1: 500
+    # Document-disjoint holdout (tools/split_forgery_holdout.py): 100 auth + 100 forged.
+    total: 200
+    label_0: 100
+    label_1: 100
   3_face:
     total: 2000
     same_true: 1000
