@@ -27,6 +27,8 @@ dev = [
 forgery = [
     "torch>=2.2.0",
     "torchvision>=0.17.0",
+    "safetensors>=0.4.0",
+    "huggingface_hub>=0.26.0",
 ]
 ocr = [
     "paddleocr[doc-parser]>=3.6.0,<4",

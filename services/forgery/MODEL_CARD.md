@@ -8,12 +8,17 @@ tags:
   - forgery-detection
   - document-forgery
   - resnet
+  - redrob
+  - redrob-verify
 pipeline_tag: image-classification
 ---
 
-# ForgeryNet (redrob-verify)
+# RedRob Verify — ForgeryNet
 
-Document image forgery detector used by [redrob-verify](https://github.com/savagemanage/redrob-verify).
+Document forgery detector for **[redrob-verify](https://github.com/savagemanage/redrob-verify)** —
+the RedRob verification stack (OCR / forgery / face / identity).
+
+Hub model: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery)
 
 ## Intended use
 

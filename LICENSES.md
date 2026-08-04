@@ -71,7 +71,7 @@ FFT/HOG heads and upsample mask head trained on synthetic `gen_forgery` masks.
 | Default weights file | `models/forgery/forgerynet_apache.pth` (not in git) |
 | Service | `forgery.backend: forgery_net`, `image_size: 320` (see `config.yaml`) |
 | Harness | Cleared in-domain TC2/TC3 on n=1000 (joint feasible; see model card) |
-| Hugging Face | **Allowed** for this checkpoint family — use `services/forgery/MODEL_CARD.md` and document ImageNet + MIDV + synthetic provenance |
+| Hugging Face | **Allowed** — Hub model id `savagemanage/redrob-verify-forgery` (see `services/forgery/MODEL_CARD.md`); document ImageNet + MIDV + synthetic provenance |
 
 ### Research-only backend: TruFor (GRIP-UNINA, nonprofit-only)
 
