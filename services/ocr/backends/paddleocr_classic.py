@@ -99,6 +99,23 @@ class PaddleOcrClassicBackend:
         }
 
 
+def _coalesce_seq(*candidates: Any) -> Any:
+    """Return the first non-empty sequence; treat empty numpy arrays as empty."""
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if isinstance(candidate, np.ndarray):
+            if candidate.size > 0:
+                return candidate
+            continue
+        try:
+            if len(candidate) > 0:
+                return candidate
+        except TypeError:
+            return candidate
+    return []
+
+
 def _iter_paddlex_texts(result: Any) -> list[tuple[str, float | None, Any]]:
     out: list[tuple[str, float | None, Any]] = []
     for res in result or [] if isinstance(result, list) else [result]:
@@ -114,14 +131,18 @@ def _iter_paddlex_texts(result: Any) -> list[tuple[str, float | None, Any]]:
             data = data.get("res") or data
         if not isinstance(data, dict):
             # OCRResult-like: attribute access
-            texts = getattr(res, "rec_texts", None) or getattr(data, "rec_texts", None)
-            scores = getattr(res, "rec_scores", None) or getattr(data, "rec_scores", None)
-            boxes = (
-                getattr(res, "rec_polys", None)
-                or getattr(res, "dt_polys", None)
-                or getattr(res, "rec_boxes", None)
+            texts = _coalesce_seq(
+                getattr(res, "rec_texts", None), getattr(data, "rec_texts", None)
             )
-            if texts:
+            scores = _coalesce_seq(
+                getattr(res, "rec_scores", None), getattr(data, "rec_scores", None)
+            )
+            boxes = _coalesce_seq(
+                getattr(res, "rec_polys", None),
+                getattr(res, "dt_polys", None),
+                getattr(res, "rec_boxes", None),
+            )
+            if texts is not None and (not isinstance(texts, np.ndarray) or texts.size > 0):
                 for i, text in enumerate(list(texts)):
                     conf = None
                     if scores is not None and i < len(scores):
@@ -132,12 +153,12 @@ def _iter_paddlex_texts(result: Any) -> list[tuple[str, float | None, Any]]:
                     box = boxes[i] if boxes is not None and i < len(boxes) else None
                     out.append((str(text), conf, box))
             continue
-        texts = data.get("rec_texts") or data.get("texts") or []
-        scores = data.get("rec_scores") or data.get("scores") or []
-        boxes = data.get("rec_polys") or data.get("dt_polys") or data.get("rec_boxes") or []
+        texts = _coalesce_seq(data.get("rec_texts"), data.get("texts"))
+        scores = _coalesce_seq(data.get("rec_scores"), data.get("scores"))
+        boxes = _coalesce_seq(data.get("rec_polys"), data.get("dt_polys"), data.get("rec_boxes"))
         for i, text in enumerate(list(texts)):
-            conf = float(scores[i]) if i < len(scores) else None
-            box = boxes[i] if i < len(boxes) else None
+            conf = float(scores[i]) if scores is not None and i < len(scores) else None
+            box = boxes[i] if boxes is not None and i < len(boxes) else None
             out.append((str(text), conf, box))
     return out
 
