@@ -8,7 +8,7 @@ Open evaluation harness and reference microservices for **document OCR**,
 Each capability is an HTTP service with a shared preflight contract (`/v1/meta`).
 A host-side harness runs reproducible metrics and writes JSON (+ optional HTML report).
 
-**Author:** Janghoon Lee (이장훈) / Redrob
+**Copyright:** Redrob. Built by Janghoon Lee (이장훈).
 
 ## Features
 
@@ -153,7 +153,7 @@ Useful commands: `./run.sh help`
 ## License
 
 Code: **Apache License 2.0** — see `LICENSE`.
-Copyright attribution: `LICENSE` and `NOTICE` (Copyright 2026 Janghoon Lee / 이장훈 / Redrob).
+Copyright attribution: `LICENSE` and `NOTICE` (Copyright 2026 Redrob; built by Janghoon Lee / 이장훈).
 
 Third-party models and datasets (PaddleOCR-VL, OpenCV Zoo, MIDV-2020, TruFor, …)
 have their own terms; inventory and constraints are in `LICENSES.md`. Weights and
