@@ -8,7 +8,7 @@
 각 기능은 공통 사전점검 계약(`/v1/meta`)을 가진 HTTP 서비스입니다.
 호스트 측 하네스가 재현 가능한 지표를 측정하고 JSON(및 선택적 HTML 리포트)을 씁니다.
 
-**작성자:** 이장훈 (Janghoon Lee)
+**작성자:** 이장훈 (Janghoon Lee) / Redrob
 
 ## 기능
 
@@ -153,7 +153,7 @@ ForgeryNet Hub 가중치는 **문서 단위로 분리된** 400/100 분할로 학
 ## 라이선스
 
 코드: **Apache License 2.0** — `LICENSE` 참고.
-저작권 표기: `NOTICE` (Copyright 2026 이장훈 / Janghoon Lee).
+저작권 표기: `LICENSE` 및 `NOTICE` (Copyright 2026 이장훈 / Janghoon Lee / Redrob).
 
 서드파티 모델·데이터셋(PaddleOCR-VL, OpenCV Zoo, MIDV-2020, TruFor 등)은
 각각 별도 조건이 있으며, 목록과 제약은 `LICENSES.md`에 있습니다. 가중치와
