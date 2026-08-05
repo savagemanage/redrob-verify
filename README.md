@@ -153,7 +153,7 @@ Useful commands: `./run.sh help`
 ## License
 
 Code: **Apache License 2.0** — see `LICENSE`.
-Copyright 2026 Janghoon Lee (이장훈).
+Copyright attribution: `NOTICE` (Copyright 2026 Janghoon Lee / 이장훈).
 
 Third-party models and datasets (PaddleOCR-VL, OpenCV Zoo, MIDV-2020, TruFor, …)
 have their own terms; inventory and constraints are in `LICENSES.md`. Weights and

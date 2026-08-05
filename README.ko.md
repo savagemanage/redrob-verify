@@ -153,7 +153,7 @@ ForgeryNet Hub 가중치는 **문서 단위로 분리된** 400/100 분할로 학
 ## 라이선스
 
 코드: **Apache License 2.0** — `LICENSE` 참고.
-Copyright 2026 이장훈 (Janghoon Lee).
+저작권 표기: `NOTICE` (Copyright 2026 이장훈 / Janghoon Lee).
 
 서드파티 모델·데이터셋(PaddleOCR-VL, OpenCV Zoo, MIDV-2020, TruFor 등)은
 각각 별도 조건이 있으며, 목록과 제약은 `LICENSES.md`에 있습니다. 가중치와
