@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload YuNet + SFace ONNX to savagemanage/redrob-verify-face."""
+"""Upload YuNet + SFace ONNX to redrob-labs/redrob-verify-face."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from pathlib import Path
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--face-dir", type=Path, default=Path("models/face"))
-    ap.add_argument("--repo-id", default="savagemanage/redrob-verify-face")
+    ap.add_argument("--repo-id", default="redrob-labs/redrob-verify-face")
     ap.add_argument("--model-card", type=Path, default=Path("services/face/MODEL_CARD.md"))
     ap.add_argument("--staging", type=Path, default=Path("results/_hf_face"))
     ap.add_argument("--private", action="store_true")

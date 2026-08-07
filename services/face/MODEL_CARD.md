@@ -17,9 +17,9 @@ pipeline_tag: image-feature-extraction
 # redrob-verify — face
 
 Face detection + recognition ONNX weights used by
-**[redrob-verify](https://github.com/savagemanage/redrob-verify)** (Redrob verification stack).
+**[redrob-verify](https://github.com/redrob-labs/redrob-verify)** (Redrob verification stack).
 
-- Hub: [`savagemanage/redrob-verify-face`](https://huggingface.co/savagemanage/redrob-verify-face)
+- Hub: [`redrob-labs/redrob-verify-face`](https://huggingface.co/redrob-labs/redrob-verify-face)
 - Upstream: [OpenCV Zoo](https://github.com/opencv/opencv_zoo) (Apache-2.0)
 - Code: `services/face/` in the GitHub repo
 
@@ -46,7 +46,7 @@ Detect faces and compare embeddings for the redrob-verify face service
 ./tools/fetch_models.sh
 
 # Or Hub only
-huggingface-cli download savagemanage/redrob-verify-face \
+huggingface-cli download redrob-labs/redrob-verify-face \
   --local-dir models/face
 ```
 

@@ -13,7 +13,7 @@ Production face backend: **YuNet** detector + **SFace** recognizer.
 | `models/face/face_detection_yunet_2023mar.onnx` | YuNet | 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4 |
 | `models/face/face_recognition_sface_2021dec.onnx` | SFace | 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79 |
 
-- Hub (preferred): [`savagemanage/redrob-verify-face`](https://huggingface.co/savagemanage/redrob-verify-face)
+- Hub (preferred): [`redrob-labs/redrob-verify-face`](https://huggingface.co/redrob-labs/redrob-verify-face)
 - Upstream Zoo fallback:
   - https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
   - https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
@@ -74,7 +74,7 @@ FFT/HOG heads and upsample mask head trained on synthetic `gen_forgery` masks.
 | Default weights file | `models/forgery/forgerynet_apache.pth` (not in git) |
 | Service | `forgery.backend: forgery_net`, `image_size: 320` (see `config.yaml`) |
 | Harness | Cleared in-domain TC2/TC3 on n=1000 (joint feasible; see model card) |
-| Hugging Face | **Allowed** — Hub model id `savagemanage/redrob-verify-forgery` (see `services/forgery/MODEL_CARD.md`); document ImageNet + MIDV + synthetic provenance |
+| Hugging Face | **Allowed** — Hub model id `redrob-labs/redrob-verify-forgery` (see `services/forgery/MODEL_CARD.md`); document ImageNet + MIDV + synthetic provenance |
 
 ### Research-only backend: TruFor (GRIP-UNINA, nonprofit-only)
 

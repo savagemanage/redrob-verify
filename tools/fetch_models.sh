@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch redrob-verify runtime weights from Hugging Face (public).
-# Face: YuNet + SFace ONNX (OpenCV Zoo, Apache-2.0) via savagemanage/redrob-verify-face
-# Forgery: ForgeryNet checkpoint via savagemanage/redrob-verify-forgery
+# Face: YuNet + SFace ONNX (OpenCV Zoo, Apache-2.0) via redrob-labs/redrob-verify-face
+# Forgery: ForgeryNet checkpoint via redrob-labs/redrob-verify-forgery
 #
 # Fallback: OpenCV Zoo GitHub raw URLs for face only if Hub is unreachable.
 set -euo pipefail
@@ -10,8 +10,8 @@ FACE_OUT="$ROOT/models/face"
 FORGERY_OUT="$ROOT/models/forgery"
 mkdir -p "$FACE_OUT" "$FORGERY_OUT"
 
-HF_FACE_REPO="${HF_FACE_REPO:-savagemanage/redrob-verify-face}"
-HF_FORGERY_REPO="${HF_FORGERY_REPO:-savagemanage/redrob-verify-forgery}"
+HF_FACE_REPO="${HF_FACE_REPO:-redrob-labs/redrob-verify-face}"
+HF_FORGERY_REPO="${HF_FORGERY_REPO:-redrob-labs/redrob-verify-forgery}"
 
 YUNET_NAME="face_detection_yunet_2023mar.onnx"
 SFACE_NAME="face_recognition_sface_2021dec.onnx"

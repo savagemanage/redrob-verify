@@ -5,7 +5,7 @@ Usage:
   export HF_TOKEN=hf_...
   python tools/publish_forgerynet_hf.py \\
     --weights models/forgery/forgerynet_apache.pth \\
-    --repo-id savagemanage/forgerynet-apache \\
+    --repo-id redrob-labs/forgerynet-apache \\
     --private   # optional
 
 Creates a staging dir with README.md (model card), config.json, and
@@ -25,8 +25,8 @@ def main() -> None:
     ap.add_argument("--weights", type=Path, required=True)
     ap.add_argument(
         "--repo-id",
-        default="savagemanage/redrob-verify-forgery",
-        help="Hub repo id (default: savagemanage/redrob-verify-forgery)",
+        default="redrob-labs/redrob-verify-forgery",
+        help="Hub repo id (default: redrob-labs/redrob-verify-forgery)",
     )
     ap.add_argument(
         "--staging",
@@ -110,7 +110,7 @@ def main() -> None:
             for k, v in meta.items()
             if k in {"epoch", "auc", "joint_interval_width", "image_size", "imagenet", "roc_gate"}
         },
-        "code_repository": "https://github.com/savagemanage/redrob-verify",
+        "code_repository": "https://github.com/redrob-labs/redrob-verify",
         "code_entry": "services/forgery/model.py",
         "license": "apache-2.0",
     }
@@ -139,7 +139,7 @@ from pathlib import Path
 import torch
 from safetensors.torch import load_file
 
-# pip/uv install from https://github.com/savagemanage/redrob-verify
+# pip/uv install from https://github.com/redrob-labs/redrob-verify
 from services.forgery.model import ForgeryNet
 
 def load(repo_dir: str | Path = ".") -> ForgeryNet:

@@ -15,10 +15,10 @@ pipeline_tag: image-classification
 
 # redrob-verify — forgery
 
-Forgery detector weights for **[redrob-verify](https://github.com/savagemanage/redrob-verify)**,
+Forgery detector weights for **[redrob-verify](https://github.com/redrob-labs/redrob-verify)**,
 the Redrob verification stack (document OCR, forgery, face match, identity).
 
-- Hub: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery)
+- Hub: [`redrob-labs/redrob-verify-forgery`](https://huggingface.co/redrob-labs/redrob-verify-forgery)
 - Code: Apache-2.0 in the GitHub repo (`services/forgery/`)
 
 ## Intended use
@@ -85,7 +85,7 @@ Protocol: `./run.sh split-forgery-holdout --regenerate-train --rebuild-eval` the
 ./tools/fetch_models.sh   # pulls face + forgery from Hugging Face
 
 # Or Hub only
-huggingface-cli download savagemanage/redrob-verify-forgery \
+huggingface-cli download redrob-labs/redrob-verify-forgery \
   --local-dir models/forgery
 ```
 
