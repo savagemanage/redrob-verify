@@ -43,8 +43,8 @@ Public weights on Hugging Face (fetched by `./tools/fetch_models.sh`):
 
 | Hub repo | Contents |
 |----------|----------|
-| [`savagemanage/redrob-verify-face`](https://huggingface.co/savagemanage/redrob-verify-face) | YuNet + SFace ONNX |
-| [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery) | ForgeryNet checkpoint |
+| [`redrob-labs/redrob-verify-face`](https://huggingface.co/redrob-labs/redrob-verify-face) | YuNet + SFace ONNX |
+| [`redrob-labs/redrob-verify-forgery`](https://huggingface.co/redrob-labs/redrob-verify-forgery) | ForgeryNet checkpoint |
 
 OCR VL / Paddle artifacts still come from their upstream Hub channels when that backend is enabled.
 
@@ -63,7 +63,7 @@ If `/v1/meta` shows `backend=stub`, check `stub_reason` and OCR container logs f
 ## Quick start
 
 ```bash
-git clone https://github.com/savagemanage/redrob-verify.git
+git clone https://github.com/redrob-labs/redrob-verify.git
 cd redrob-verify
 chmod +x run.sh tools/bootstrap_gpu.sh tools/fetch_models.sh
 
@@ -107,6 +107,7 @@ Follow each dataset’s `license.txt`. Details: `LICENSES.md`, `data/README.md`.
 ## Evaluation
 
 ```bash
+./run.sh eval-all        # preflight + TC1–TC6 + report.html
 ./run.sh eval-cer        # OCR cer_field
 ./run.sh eval-forgery
 ./run.sh eval-face
@@ -160,7 +161,7 @@ have their own terms; inventory and constraints are in `LICENSES.md`. Weights an
 raw images are downloaded locally and must not be committed.
 
 **Forgery note:** default backend is **ForgeryNet** (Apache-oriented, in-repo +
-torchvision ImageNet init). Weights: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery).
+torchvision ImageNet init). Weights: [`redrob-labs/redrob-verify-forgery`](https://huggingface.co/redrob-labs/redrob-verify-forgery).
 Optional **TruFor** (`FORGERY_BACKEND=trufor`) is research-only (GRIP-UNINA nonprofit
 terms) — do not publish those weights.
 

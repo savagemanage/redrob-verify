@@ -43,8 +43,8 @@ Hugging Face 공개 가중치 (`./tools/fetch_models.sh`로 가져옴):
 
 | Hub 저장소 | 내용 |
 |------------|------|
-| [`savagemanage/redrob-verify-face`](https://huggingface.co/savagemanage/redrob-verify-face) | YuNet + SFace ONNX |
-| [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery) | ForgeryNet 체크포인트 |
+| [`redrob-labs/redrob-verify-face`](https://huggingface.co/redrob-labs/redrob-verify-face) | YuNet + SFace ONNX |
+| [`redrob-labs/redrob-verify-forgery`](https://huggingface.co/redrob-labs/redrob-verify-forgery) | ForgeryNet 체크포인트 |
 
 OCR VL / Paddle 아티팩트는 해당 백엔드 사용 시 업스트림 Hub에서 가져옵니다.
 
@@ -63,7 +63,7 @@ OCR VL / Paddle 아티팩트는 해당 백엔드 사용 시 업스트림 Hub에�
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/savagemanage/redrob-verify.git
+git clone https://github.com/redrob-labs/redrob-verify.git
 cd redrob-verify
 chmod +x run.sh tools/bootstrap_gpu.sh tools/fetch_models.sh
 
@@ -107,6 +107,7 @@ MIDV-2020 저자 FTP: `ftp://smartengines.com/midv-2020`
 ## 평가
 
 ```bash
+./run.sh eval-all        # 사전점검 + TC1–TC6 + report.html
 ./run.sh eval-cer        # OCR cer_field
 ./run.sh eval-forgery
 ./run.sh eval-face
@@ -160,7 +161,7 @@ ForgeryNet Hub 가중치는 **문서 단위로 분리된** 400/100 분할로 학
 원본 이미지는 로컬에 내려받으며 커밋하지 마세요.
 
 **위조 참고:** 기본 백엔드는 **ForgeryNet**(Apache 지향, 인레포 +
-torchvision ImageNet 초기화). 가중치: [`savagemanage/redrob-verify-forgery`](https://huggingface.co/savagemanage/redrob-verify-forgery).
+torchvision ImageNet 초기화). 가중치: [`redrob-labs/redrob-verify-forgery`](https://huggingface.co/redrob-labs/redrob-verify-forgery).
 선택 **TruFor** (`FORGERY_BACKEND=trufor`)는 연구 전용(GRIP-UNINA nonprofit
 조건) — 해당 가중치는 공개하지 마세요.
 
